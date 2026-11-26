@@ -48,7 +48,11 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 
 ## Journal des leçons (ne jamais refaire)
 
-- Modèle de base Quaternius = corps nu : il faut le pack **Modular Character Outfits – Fantasy** (demandé au créateur). En attendant, la tenue est **peinte par zones du corps** (tunique, manches, brassards, ceinture, pantalon, bottes) : script Python qui lit le maillage (position au repos → zone) et colorie la texture UV. Normal map désactivée (sinon les muscles transparaissent).
+- Personnages : `scripts/character_builder.gd` (`CB.build`) = tête du corps de base (triangles au-dessus du cou, le reste traverserait les vêtements) + tenue **Modular Character Outfits – Fantasy** (Ranger, Peasant ; même squelette, animations UAL intactes). Tenues assombries (`dim`). Héros : `T_Hero_Ranger.png` (vert forêt recoloré par script, le vert d'origine est criard). Sourcils en `ALPHA_SCISSOR` (sinon taches blanches), pas de contour ni de liseré sur les yeux et sourcils.
+- Capuche du Ranger visible seulement avec la Capuche de lin (cheveux masqués).
+- Objets tenus : `CB.hold(model, scène, os, pos, rot)`. Épée de bronze dans `hand_r` (0, −90, −90), bouclier de bois dans `hand_l` (0, 180, 90).
+- Fantasy Props MegaKit (`assets/fprops`, préfixe `P:` dans `town.gd`, liste `FPROPS` dans `main.gd`) : toujours assombris par `main._tint_soft()`. Rien sous les avant-toits (invisible du dessus).
+- `ABY_TEST=close` : la caméra se retourne (`face`) pour voir le héros de face, puis capture avec la capuche.
 - Beauté des personnages : `G.character_look()` (contour sombre en coque inversée, liseré de lumière, teinte, lave qui luit et respire). L'appliquer à tout nouveau personnage ou monstre.
 - Épée `Human_Sword.fbx` dans `hand_r` : rotation (0, −90, −90), matériau acier remplacé (texture manquante = rose).
 - Les textures Quaternius sont trop claires sous ce rendu : teinter les rochers (0,66 0,63 0,58), cailloux et bordures.
@@ -73,7 +77,7 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 ## Atelier de nuit
 
 Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
-Derniers chantiers faits : 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
+Derniers chantiers faits : héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
 Boss fait : Gardien de cendre (repaire au nord-ouest du camp des brutes, 3 phases, rejetons, pluie de cendres, souffle en cône, Cœur ardent).
 Prochain : réactions des monstres aux coups (recul, titubement, chute), contres et esquives (fenêtre de parade façon Lugaru, ralenti sur contre parfait), puis une nouvelle espèce.
 

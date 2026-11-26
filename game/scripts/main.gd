@@ -97,6 +97,15 @@ const CAMP := [
 	["Prop_Support", -3, -26, 0, 1.0, 0.0], ["Prop_Support", 3, -26.5, 0, 1.0, 0.0],
 ]
 
+## Fantasy Props MegaKit hors du bourg : butin des brutes, trésor du Gardien
+const FPROPS := [
+	# camp des brutes : chaudron près du feu, tonneaux, râtelier pillé
+	["Cauldron", 1.8, -22.6, 20, 0.9, 0.45], ["Barrel", 6.6, -23.6, 0, 0.9, 0.4], ["Barrel", 7.2, -24.6, 40, 0.8, 0.0],
+	["WeaponStand", -4.8, -26.8, 10, 0.9, 0.0], ["Bucket_Wooden_1", -1.6, -21.8, 0, 1.0, 0.0],
+	# repaire du Gardien : coffre et pièces au fond de la cuvette
+	["Chest_Wood", -19.8, -30.2, 30, 0.9, 0.5], ["Coin_Pile", -18.6, -30.8, 0, 1.6, 0.0], ["Coin_Pile", -20.7, -29.0, 70, 1.3, 0.0],
+]
+
 # Herbes : touffes posées à la main (centre x, z, nombre de brins)
 const GRASS := [
 	[-6, 30, 6], [5, 31, 5], [-12, 24, 7], [11, 26, 6], [-15, 16, 8], [-8, 8, 6], [10, 14, 6], [14, 8, 5],
@@ -161,6 +170,7 @@ func _ready() -> void:
 	_build_bounds()
 	for d in DECOR: _place(N % d[0], d)
 	for d in CAMP: _place(P % d[0], d)
+	for d in FPROPS: _place("res://assets/fprops/%s.gltf" % d[0], d)
 	_build_campfire(Vector3(0, 0, -24))
 	_lair_embers()
 	var town: Node = Town.new()
@@ -380,6 +390,8 @@ func _place(path: String, d: Array) -> void:
 		if d[4] >= 1.5: _dither_tree(n, 9.0, 11.5)   # gros rochers : s'effacent s'ils cachent le combat
 	elif "Pebble" in path:
 		_tint(n, Color(0.5, 0.47, 0.44))
+	elif "fprops" in path:
+		_tint_soft(n)
 	if d[5] > 0.0:
 		var body := StaticBody3D.new()
 		var cs := CollisionShape3D.new()
@@ -423,6 +435,19 @@ func _tint(n: Node3D, c: Color) -> void:
 			if not _tint_mats.has(key):
 				var m: StandardMaterial3D = src.duplicate()
 				m.albedo_color = c
+				_tint_mats[key] = m
+			mi.set_surface_override_material(si, _tint_mats[key])
+
+## Objets du Fantasy Props MegaKit : texture gardée, juste assombrie (trop claire sous ce rendu).
+func _tint_soft(n: Node3D, c := Color(0.8, 0.78, 0.74)) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		for si in mi.mesh.get_surface_count():
+			var src: Material = mi.mesh.surface_get_material(si)
+			if not (src is StandardMaterial3D): continue
+			var key := [src, c, "soft"]
+			if not _tint_mats.has(key):
+				var m: StandardMaterial3D = src.duplicate()
+				m.albedo_color = src.albedo_color * c
 				_tint_mats[key] = m
 			mi.set_surface_override_material(si, _tint_mats[key])
 

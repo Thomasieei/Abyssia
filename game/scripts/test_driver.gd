@@ -26,7 +26,8 @@ func _ready() -> void:
 		_render_map()
 		return
 	if OS.get_environment("ABY_TEST") == "close":
-		steps = [["wait", 1.0], ["shot", "gros_plan_repos"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.6], ["shot", "gros_plan_brutes"],
+		steps = [["wait", 1.0], ["shot", "gros_plan_repos"], ["face"], ["wait", 0.3], ["shot", "gros_plan_face"],
+			["equip", "capuche_lin"], ["wait", 0.3], ["shot", "gros_plan_capuche"], ["equip", "casque_garde"], ["unface"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.6], ["shot", "gros_plan_brutes"],
 			["tp", Vector3(20.5, 0, -3.5)], ["wait", 0.6], ["shot", "gros_plan_rodeurs"], ["tp", Vector3(-17.5, 0, -24.0)], ["wait", 0.6], ["shot", "gros_plan_boss"],
 			]
 		_next()
@@ -96,6 +97,15 @@ func _next() -> void:
 			_next()
 		"panel":
 			G.hud.get_child(0).open_panel(G.stations[s[1]])
+			_next()
+		"face":
+			G.cam_rig.rotation.y = PI
+			_next()
+		"unface":
+			G.cam_rig.rotation.y = 0.0
+			_next()
+		"equip":
+			G.equip(s[1])
 			_next()
 		"close":
 			G.hud.get_child(0).do_action(["close"])

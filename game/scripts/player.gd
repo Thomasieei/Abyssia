@@ -1,4 +1,5 @@
 extends CharacterBody3D
+const CB := preload("res://scripts/character_builder.gd")
 ## Héros : déplacement au joystick, attaque assistée, 3 sorts d'arme + 1 sort de plastron, récolte.
 
 signal hp_changed(hp: float, max_hp: float, shield: float)
@@ -41,6 +42,9 @@ var _wind: CPUParticles3D
 var _rune: MeshInstance3D
 
 var model: Node3D
+var _hood: Node3D
+var _hair: Node3D
+var _shield: Node3D
 var ap: AnimationPlayer
 var _action_t := 0.0          # temps restant d'une action qui bloque le déplacement
 var _action := ""
@@ -81,52 +85,27 @@ func _ready() -> void:
 	_rune = G.ground_quad(self, "magic_03", Color(1.0, 0.82, 0.4, 0.0), 3.2)
 
 func _build_model() -> void:
-	model = load("res://assets/hero/Superhero_Male_FullBody.gltf").instantiate()
+	# Tenue de rôdeur Quaternius (capuche visible seulement avec la Capuche de lin)
+	model = CB.build({"outfit": "res://assets/outfits/Male_Ranger.gltf", "texture": "res://assets/outfits/T_Hero_Ranger.png", "dim": Color(0.9, 0.9, 0.88), "hair": "res://assets/hero/Hair_SimpleParted.gltf",
+		"beard": true, "hide": ["Male_Ranger_Head_Hood"]})
 	model.rotation.y = PI
 	add_child(model)
 	var sk: Skeleton3D = model.find_child("Skeleton3D")
-	# Tenue : teinte cuir sombre, plus lisible en vue du dessus
-	var body: MeshInstance3D = model.find_child("SuperHero_Male")
-	if body:
-		for s in body.mesh.get_surface_count():
-			var m: StandardMaterial3D = body.mesh.surface_get_material(s).duplicate()
-			# tenue de cuir provisoire peinte sur le modèle de base (en attendant le pack de tenues)
-			m.albedo_texture = load("res://assets/hero/T_Hero_Leather.png")
-			m.albedo_color = Color(1, 1, 1)
-			m.normal_enabled = false   # pas de relief musculaire sous la tenue
-			body.set_surface_override_material(s, m)
-	# Cheveux et barbe attachés à la tête
-	var head_rest := sk.get_bone_global_rest(sk.find_bone("Head"))
-	for hp_path in ["res://assets/hero/Hair_SimpleParted.gltf", "res://assets/hero/Hair_Beard.gltf"]:
-		var ba := BoneAttachment3D.new()
-		ba.bone_name = "Head"
-		sk.add_child(ba)
-		var hair: Node3D = load(hp_path).instantiate()
-		ba.add_child(hair)
-		hair.transform = head_rest.affine_inverse()
-		for hm in hair.find_children("*", "MeshInstance3D", true, false):
-			var hmat: StandardMaterial3D = hm.mesh.surface_get_material(0).duplicate()
-			hmat.albedo_color = Color(0.32, 0.2, 0.12)
-			hm.set_surface_override_material(0, hmat)
-	# Épée dans la main droite
-	var hand := BoneAttachment3D.new()
-	hand.bone_name = "hand_r"
-	sk.add_child(hand)
-	var sword: Node3D = load("res://assets/props/Human_Sword.fbx").instantiate()
-	hand.add_child(sword)
-	sword.position = Vector3(0.0, 0.05, 0.02)
-	sword.rotation_degrees = Vector3(0, -90, -90)
+	_hood = sk.find_child("Male_Ranger_Head_Hood", false, false)
+	_hair = sk.find_child("Cheveux", false, false)
+	# Épée et bouclier de bronze (Fantasy Props MegaKit)
+	var sword := CB.hold(model, "res://assets/fprops/Sword_Bronze.gltf", "hand_r", Vector3(0.0, 0.05, 0.02), Vector3(0, -90, -90), 1.0)
 	var sr := OS.get_environment("ABY_SWORD")
 	if sr != "":
 		var v := sr.split(",")
 		sword.rotation_degrees = Vector3(float(v[0]), float(v[1]), float(v[2]))
-	sword.scale = Vector3.ONE * 1.1
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color(0.72, 0.74, 0.78)
-	steel.metallic = 0.85
-	steel.roughness = 0.32
-	for mi in sword.find_children("*", "MeshInstance3D", true, false):
-		mi.material_override = steel
+	_shield = CB.hold(model, "res://assets/fprops/Shield_Wooden.gltf", "hand_l", Vector3(-0.02, 0.06, -0.08), Vector3(0, 180, 90), 0.9)
+	var shr := OS.get_environment("ABY_SHIELD")
+	if shr != "":
+		var w := shr.split(",")
+		_shield.rotation_degrees = Vector3(float(w[0]), float(w[1]), float(w[2]))
+	G.gear_changed.connect(_show_gear)
+	_show_gear()
 	G.character_look(model, {"rim_amount": 0.6, "thick": 0.012, "outline": Color(0.05, 0.035, 0.025)})
 	# Animations Quaternius (même squelette)
 	ap = AnimationPlayer.new()
@@ -148,6 +127,12 @@ func _rebuild_skills() -> void:
 		d["id"] = ids[i]
 		skills.append(d)
 		if old.size() > i and old[i]["id"] != ids[i]: cd_left[i] = 0.0
+
+## L'équipement se voit : capuche de lin = capuche sur la tête.
+func _show_gear() -> void:
+	var hooded: bool = G.equipped.get("casque", "") == "capuche_lin"
+	if _hood: _hood.visible = hooded
+	if _hair: _hair.visible = not hooded
 
 func _build_bubble() -> void:
 	_bubble = MeshInstance3D.new()

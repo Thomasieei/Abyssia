@@ -380,7 +380,7 @@ func character_look(model: Node3D, opts: Dictionary) -> void:
 				var m: StandardMaterial3D = src.duplicate()
 				if opts.has("tint") and not ("Glow" in src.resource_name):
 					m.albedo_color = m.albedo_color * opts.tint
-				m.rim_enabled = true
+				m.rim_enabled = not ("Eye" in src.resource_name)
 				m.rim = opts.get("rim_amount", 0.55)
 				m.rim_tint = 0.35
 				if opts.has("rough") and "Skin" in src.resource_name: m.roughness = opts.rough
@@ -392,7 +392,7 @@ func character_look(model: Node3D, opts: Dictionary) -> void:
 						m.emission_energy_multiplier = 0.25
 					_lava_mats.append(m)
 				# le contour suit la peau (squelette) grâce au passage suivant
-				if not ("Eye" in src.resource_name):
+				if not ("Eye" in src.resource_name or "Hair_1" in src.resource_name):
 					m.next_pass = outline
 				_look_cache[key] = m
 			mi.set_surface_override_material(si, _look_cache[key])

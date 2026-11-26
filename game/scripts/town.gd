@@ -4,6 +4,7 @@ extends Node3D
 
 const V := "res://assets/village/%s.gltf"
 const N := "res://assets/nature/%s.gltf"
+const P := "res://assets/fprops/%s.gltf"   # Fantasy Props MegaKit (Quaternius)
 const CENTER := Vector3(0, 0, 60)      # place du bourg
 
 ## Plans : position, orientation (façade vers…), largeur (4 ou 6 m), style, façade / arrière / côtés.
@@ -50,6 +51,27 @@ const PROPS := [
 	["N:Pine_4", 21, 75, 30, 1.2, 0.6], ["N:Pine_1", 22, 66, 300, 1.3, 0.6], ["N:CommonTree_1", 21, 57, 120, 1.1, 0.5],
 	["N:Pine_3", 22, 49, 45, 1.25, 0.6], ["N:Pine_5", 19, 42, 260, 1.15, 0.6],
 	["N:Rock_Medium_2", -17, 63, 30, 0.8, 0.9], ["N:Rock_Medium_3", 17, 79, 200, 0.8, 0.9],
+	# --- Fantasy Props MegaKit ---
+	# forge : enclume sur billot, pierre à aiguiser, râtelier d'armes, seau d'eau, tonneau
+	["P:Anvil_Log", 5.0, 62.0, 75, 1.0, 0.5], ["P:Bucket_Wooden_1", 5.9, 63.0, 20, 1.0, 0.0],
+	["P:Whetstone", 7.9, 63.2, -90, 0.95, 0.55], ["P:WeaponStand", 8.0, 57.4, -90, 1.0, 0.6],
+	["P:Barrel", 4.6, 57.2, 30, 0.95, 0.4],
+	# tisserand : établi, tabouret, rouleau de corde, pot
+	["P:Workbench", -4.4, 55.2, 0, 0.95, 0.85], ["P:Stool", -4.6, 54.2, 15, 1.0, 0.0],
+	["P:Rope_1", -7.0, 60.4, 40, 1.0, 0.0], ["P:Pot_1", -7.9, 60.0, 0, 1.0, 0.0],
+	# marché : tonneau de pommes, cageots, tonneau, charrette d'étal
+	["P:Barrel_Apples", -2.3, 49.2, 10, 0.95, 0.4], ["P:FarmCrate_Carrot", 2.4, 49.5, -15, 1.0, 0.35],
+	["P:FarmCrate_Apple", -2.4, 50.4, 70, 1.0, 0.0], ["P:Barrel", 6.3, 51.2, 0, 0.9, 0.4],
+	["P:Stall_Cart_Empty", 3.4, 43.6, 95, 0.9, 0.9],
+	# place : bancs autour de l'arbre, mannequin d'entraînement, coffre devant le conseil
+	["P:Bench", -3.7, 63.0, 35, 0.75, 0.0], ["P:Bench", 3.7, 63.0, -35, 0.75, 0.0],
+	["P:Dummy", -8.6, 65.2, 40, 1.0, 0.4], ["P:Chest_Wood", 2.6, 70.0, 180, 0.8, 0.45],
+]
+
+## Petits objets posés sur les étals (hauteur fixe au-dessus du sol) : [modèle, x, y, z, angle°, échelle]
+const ON_STALLS := [
+	["FarmCrate_Apple", -4.5, 0.93, 49.8, 5, 0.8], ["FarmCrate_Carrot", -3.8, 0.93, 49.4, -10, 0.7],
+	["Coin_Pile", 4.1, 0.93, 49.9, 30, 1.2], ["Pot_1", 4.8, 0.93, 50.2, 0, 0.7],
 ]
 
 ## Postes de travail : interaction quand on s'en approche
@@ -65,13 +87,20 @@ func build(m: Node3D) -> void:
 	main = m
 	for h in HOUSES: _house(h)
 	for p in PROPS:
-		var path: String = (V if p[0].begins_with("V:") else N) % p[0].substr(2)
+		var path: String = {"V": V, "N": N, "P": P}[p[0][0]] % p[0].substr(2)
 		main._place(path, [p[0].substr(2), p[1], p[2], p[3], p[4], p[5]])
 	_forge_fire(Vector3(5.6, 0, 55.4))
 	_stall(Vector3(-4.2, 0, 49.6), 8)
 	_stall(Vector3(4.4, 0, 49.9), -10)
 	_square_tree()
 	_station_marks()
+	for o in ON_STALLS:
+		var n: Node3D = load(P % o[0]).instantiate()
+		n.position = Vector3(o[1], main.h(o[1], o[3]) + o[2], o[3])
+		n.rotation_degrees.y = o[4]
+		n.scale = Vector3.ONE * o[5]
+		main.add_child(n)
+		main._tint_soft(n)
 
 func _put(name: String, local: Vector3, yaw_deg: float, parent: Node3D) -> Node3D:
 	var n: Node3D = load(V % name).instantiate()
