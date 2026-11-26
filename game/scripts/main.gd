@@ -12,6 +12,10 @@ const P := "res://assets/props/%s.gltf"
 const HALF := 38.0
 const Z_MAX := 86.0          # le bourg prolonge la carte vers le sud
 const Town := preload("res://scripts/town.gd")
+const Terrain := preload("res://scripts/terrain.gd")
+
+func h(x: float, z: float) -> float:
+	return Terrain.height(x, z, PATHS)
 
 # Chemins de terre : segments (ax, az, bx, bz, demi-largeur)
 const PATHS := [
@@ -36,7 +40,7 @@ const DECOR := [
 	["Pine_1", -36, -2, 200, 1.35, 0.6], ["CommonTree_5", -34, 6, 80, 1.1, 0.5], ["Pine_3", -35, 14, 10, 1.25, 0.6],
 	["CommonTree_3", -33, 22, 160, 1.1, 0.5], ["Pine_5", -35, 29, 270, 1.2, 0.6], ["Pine_2", -29, 34, 45, 1.15, 0.6],
 	# --- lisière est ---
-	["Pine_3", 34, -24, 30, 1.25, 0.6], ["DeadTree_2", 33, -16, 0, 1.2, 0.4], ["Pine_1", 35, -8, 110, 1.3, 0.6],
+	["Pine_3", 34, -24, 30, 1.25, 0.6], ["DeadTree_2", 35, -19, 0, 1.2, 0.4], ["Pine_1", 35, -8, 110, 1.3, 0.6],
 	["Pine_4", 34, 1, 220, 1.2, 0.6], ["CommonTree_2", 33, 9, 15, 1.15, 0.5], ["Pine_2", 35, 17, 300, 1.3, 0.6],
 	["CommonTree_4", 33, 25, 75, 1.1, 0.5], ["Pine_5", 30, 33, 190, 1.25, 0.6],
 	# --- lisière sud (arrivée) : on laisse l'entrée du chemin libre ---
@@ -44,10 +48,21 @@ const DECOR := [
 	["Pine_4", 8, 37, 20, 1.25, 0.6], ["CommonTree_3", 15, 35, 250, 1.1, 0.5], ["Pine_2", 23, 36, 90, 1.2, 0.6],
 	# --- bosquets intérieurs (ils cadrent le chemin) ---
 	["CommonTree_1", -9, 26, 20, 1.0, 0.5], ["CommonTree_5", 8, 22, 140, 0.95, 0.5], ["Bush_Common", 6, 24, 0, 1.1, 0.0],
-	["CommonTree_3", -20, 4, 60, 1.1, 0.5], ["CommonTree_2", -24, -1, 200, 1.0, 0.5], ["Pine_4", -21, -6, 0, 1.0, 0.5],
+	["CommonTree_3", -20, 4, 60, 1.1, 0.5], ["CommonTree_2", -24, -1, 200, 1.0, 0.5], ["Pine_4", -17.5, -1, 0, 1.0, 0.5],
 	["CommonTree_4", 13, 13, 90, 1.05, 0.5], ["CommonTree_1", 18, 17, 310, 1.0, 0.5], ["Pine_1", 16, 24, 30, 0.9, 0.5],
-	["TwistedTree_1", -16, -6, 30, 1.0, 0.5], ["CommonTree_5", -15, -14, 100, 1.05, 0.5],
-	["TwistedTree_3", 14, -20, 210, 1.0, 0.5], ["Pine_3", -24, -20, 50, 1.05, 0.5], ["CommonTree_2", 22, -24, 150, 1.0, 0.5],
+	["TwistedTree_1", -15, -5, 30, 0.72, 0.4], ["CommonTree_5", -15, -14, 100, 1.05, 0.5],
+	["TwistedTree_3", 14, -20, 210, 0.75, 0.4], ["Pine_3", -24, -20, 50, 1.05, 0.5], ["CommonTree_2", 22, -24, 150, 1.0, 0.5],
+	# --- étang (ouest) : roseaux, pierres de berge ---
+	["Grass_Wispy_Tall", -19.6, -9.5, 0, 1.4, 0.0], ["Grass_Wispy_Tall", -20.2, -12.8, 60, 1.3, 0.0], ["Plant_7", -21.5, -15.2, 0, 1.3, 0.0],
+	["Grass_Wispy_Tall", -25.5, -15.6, 120, 1.5, 0.0], ["Plant_7_Big", -29.8, -12.5, 30, 1.0, 0.0], ["Grass_Wispy_Tall", -30.2, -8.2, 200, 1.4, 0.0],
+	["Grass_Wispy_Tall", -27.6, -4.8, 90, 1.3, 0.0], ["Plant_7", -22.4, -5.0, 300, 1.2, 0.0], ["Fern_1", -19.0, -7.0, 40, 1.2, 0.0],
+	["Rock_Medium_2", -20.4, -14.6, 30, 0.6, 0.6], ["Rock_Medium_3", -29.6, -6.4, 200, 0.7, 0.7], ["Pebble_Round_3", -21.2, -7.4, 0, 2.0, 0.0],
+	["Pebble_Round_1", -26.8, -15.4, 0, 2.2, 0.0], ["Pebble_Square_2", -30.4, -10.6, 0, 2.0, 0.0],
+	# --- falaises : gros rochers au pied des crêtes (tanière des rôdeurs, crête nord) ---
+	["Rock_Medium_1", 29.5, -15.5, 20, 2.6, 0.85], ["Rock_Medium_3", 28.0, -9.5, 140, 2.4, 0.85], ["Rock_Medium_2", 26.6, -18.8, 260, 2.2, 0.85],
+	["Rock_Medium_1", 31.0, -4.0, 90, 2.0, 0.85], ["Rock_Medium_3", 25.0, 0.8, 300, 1.6, 0.85],
+	["Rock_Medium_2", -14.0, -30.5, 80, 2.0, 0.85], ["Rock_Medium_1", 15.0, -31.0, 200, 2.2, 0.85], ["Rock_Medium_3", 22.0, -28.5, 30, 1.8, 0.85],
+	["Rock_Medium_1", -29.5, 0.5, 160, 1.8, 0.85], ["Rock_Medium_2", -28.0, 18.0, 40, 1.9, 0.85],
 	# --- rochers ---
 	["Rock_Medium_1", 9, 6, 30, 1.0, 1.2], ["Rock_Medium_3", -17, 21, 200, 0.9, 1.0], ["Rock_Medium_2", 15, 4, 90, 0.7, 0.8],
 	["Rock_Medium_2", -7, -4, 300, 0.8, 0.9], ["Rock_Medium_1", -27, 12, 120, 1.1, 1.2], ["Rock_Medium_3", 26, 14, 10, 1.0, 1.1],
@@ -145,7 +160,7 @@ func _ready() -> void:
 	_build_grass()
 	for f in FLAX:
 		var g: Node3D = GatherNode.new()
-		g.setup(Vector3(f[0], 0, f[1]), deg_to_rad(f[2]), f[3])
+		g.setup(Vector3(f[0], h(f[0], f[1]), f[1]), deg_to_rad(f[2]), f[3])
 		add_child(g)
 		G.gather_nodes.append(g)
 	var fauna: Node = load("res://scripts/fauna.gd").new()
@@ -201,12 +216,7 @@ func _build_environment() -> void:
 
 func _build_ground() -> void:
 	var m := MeshInstance3D.new()
-	var pm := PlaneMesh.new()
-	pm.size = Vector2(HALF * 2 + 40, HALF + Z_MAX + 40)
-	m.position.z = (Z_MAX - HALF) * 0.5
-	pm.subdivide_width = 1
-	pm.subdivide_depth = 1
-	m.mesh = pm
+	m.mesh = _terrain_mesh()
 	var mat := ShaderMaterial.new()
 	mat.shader = load("res://scripts/ground.gdshader")
 	var nt := NoiseTexture2D.new()
@@ -231,11 +241,102 @@ func _build_ground() -> void:
 	m.material_override = mat
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(m)
+	add_child(_terrain_body())
+	_build_water()
+
+# Maillage du relief : grille régulière, normales calculées depuis la hauteur.
+const GRID := 1.25
+const X0 := -58.0
+const X1 := 58.0
+const Z0 := -58.0
+const Z1 := 106.0
+
+func _terrain_mesh() -> ArrayMesh:
+	var nx := int((X1 - X0) / GRID) + 1
+	var nz := int((Z1 - Z0) / GRID) + 1
+	var hs := PackedFloat32Array()
+	hs.resize(nx * nz)
+	for j in nz:
+		for i in nx:
+			hs[j * nx + i] = h(X0 + i * GRID, Z0 + j * GRID)
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	verts.resize(nx * nz)
+	norms.resize(nx * nz)
+	for j in nz:
+		for i in nx:
+			var k := j * nx + i
+			verts[k] = Vector3(X0 + i * GRID, hs[k], Z0 + j * GRID)
+			var hl: float = hs[k - 1] if i > 0 else hs[k]
+			var hr: float = hs[k + 1] if i < nx - 1 else hs[k]
+			var hd: float = hs[k - nx] if j > 0 else hs[k]
+			var hu: float = hs[k + nx] if j < nz - 1 else hs[k]
+			norms[k] = Vector3(hl - hr, 2.0 * GRID, hd - hu).normalized()
+	var idx := PackedInt32Array()
+	idx.resize((nx - 1) * (nz - 1) * 6)
+	var c := 0
+	for j in nz - 1:
+		for i in nx - 1:
+			var a := j * nx + i
+			idx[c] = a; idx[c + 1] = a + 1; idx[c + 2] = a + nx
+			idx[c + 3] = a + 1; idx[c + 4] = a + nx + 1; idx[c + 5] = a + nx
+			c += 6
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = norms
+	arr[Mesh.ARRAY_INDEX] = idx
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return am
+
+## Collision du relief (grille de 1 m).
+func _terrain_body() -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "Sol"
+	var w := int(X1 - X0) + 1
+	var d := int(Z1 - Z0) + 1
+	var data := PackedFloat32Array()
+	data.resize(w * d)
+	for j in d:
+		for i in w:
+			data[j * w + i] = h(X0 + i, Z0 + j)
+	var shape := HeightMapShape3D.new()
+	shape.map_width = w
+	shape.map_depth = d
+	shape.map_data = data
 	var cs := CollisionShape3D.new()
-	cs.shape = WorldBoundaryShape3D.new()
+	cs.shape = shape
 	body.add_child(cs)
+	body.position = Vector3((X0 + X1) * 0.5, 0, (Z0 + Z1) * 0.5)
+	return body
+
+## L'étang : eau animée (vagues, reflets, écume au rivage).
+func _build_water() -> void:
+	var m := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	var r: float = (Terrain.POND[2] + 2.5) * 1.3
+	pm.size = Vector2(r * 2, r * 2)
+	pm.subdivide_width = 16
+	pm.subdivide_depth = 16
+	m.mesh = pm
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://scripts/water.gdshader")
+	mat.set_shader_parameter("noise_tex", cloud_tex)
+	mat.set_shader_parameter("center", Vector2(Terrain.POND[0], Terrain.POND[1]))
+	mat.set_shader_parameter("shore", Terrain.shore_radius())
+	m.material_override = mat
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	m.position = Vector3(Terrain.POND[0], Terrain.WATER_Y, Terrain.POND[1])
+	add_child(m)
+	var body := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = Terrain.shore_radius() - 0.9
+	cyl.height = 3.0
+	cs.shape = cyl
+	body.add_child(cs)
+	body.position = Vector3(Terrain.POND[0], 0.5, Terrain.POND[1])
 	add_child(body)
 
 func _build_bounds() -> void:
@@ -255,7 +356,7 @@ func _build_bounds() -> void:
 # Pose d'un élément de décor (avec collision cylindrique éventuelle)
 func _place(path: String, d: Array) -> void:
 	var n: Node3D = load(path).instantiate()
-	n.position = Vector3(d[1], 0, d[2])
+	n.position = Vector3(d[1], h(d[1], d[2]) - 0.04, d[2])
 	n.rotation.y = deg_to_rad(d[3])
 	n.scale = Vector3.ONE * d[4]
 	add_child(n)
@@ -280,7 +381,7 @@ func _place(path: String, d: Array) -> void:
 
 ## Les feuillages proches de la caméra (donc entre elle et le héros) s'effacent en tramage :
 ## aucun calcul par image, aucun tri de transparence.
-func _dither_tree(n: Node3D, dmin := 9.0, dmax := 13.0) -> void:
+func _dither_tree(n: Node3D, dmin := 10.0, dmax := 12.5) -> void:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		for si in mi.mesh.get_surface_count():
 			var src: Material = mi.mesh.surface_get_material(si)
@@ -313,11 +414,13 @@ func _tint(n: Node3D, c: Color) -> void:
 			mi.set_surface_override_material(si, _tint_mats[key])
 
 func _build_campfire(pos: Vector3) -> void:
+	pos.y = h(pos.x, pos.z)
 	# cercle de pierres
 	for i in 8:
 		var a := TAU * i / 8.0
 		var s: Node3D = load(N % ("Pebble_Round_1" if i % 2 == 0 else "Pebble_Round_3")).instantiate()
 		s.position = pos + Vector3(cos(a), 0, sin(a)) * 0.95
+		s.position.y = h(s.position.x, s.position.z)
 		s.rotation.y = a
 		s.scale = Vector3.ONE * 2.2
 		add_child(s)
@@ -374,7 +477,9 @@ func _build_grass() -> void:
 			var a: float = float(i) * 2.399 + c[0] * 0.13
 			var r: float = 0.35 + 0.42 * sqrt(float(i))
 			var k: String = kinds[(i + int(c[0]) + int(c[1])) % kinds.size()]
-			var t := Transform3D(Basis(Vector3.UP, a * 1.7).scaled(Vector3.ONE * (0.8 + 0.08 * (i % 4))), Vector3(c[0] + cos(a) * r, 0, c[1] + sin(a) * r))
+			var gx: float = c[0] + cos(a) * r
+			var gz: float = c[1] + sin(a) * r
+			var t := Transform3D(Basis(Vector3.UP, a * 1.7).scaled(Vector3.ONE * (0.8 + 0.08 * (i % 4))), Vector3(gx, h(gx, gz) - 0.03, gz))
 			xf[k].append(t)
 	for k in kinds:
 		if xf[k].is_empty(): continue
@@ -406,7 +511,7 @@ func _spawn_monsters() -> void:
 		var camp := []
 		for m in MONSTERS[camp_name]:
 			var e: CharacterBody3D = Enemy.new()
-			e.setup(m[0], Vector3(m[1], 0, m[2]), deg_to_rad(m[3]))
+			e.setup(m[0], Vector3(m[1], h(m[1], m[2]), m[2]), deg_to_rad(m[3]))
 			add_child(e)
 			camp.append(e)
 			G.enemies.append(e)

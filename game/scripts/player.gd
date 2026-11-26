@@ -62,6 +62,8 @@ func _ready() -> void:
 	add_to_group("player")
 	collision_layer = 2
 	collision_mask = 1 | 4
+	floor_snap_length = 0.6
+	floor_max_angle = deg_to_rad(48.0)
 	var col := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.38
@@ -176,6 +178,14 @@ func _replay(anim: String, blend := 0.08, speed := 1.0) -> void:
 	ap.seek(0.0, true)
 
 # --------------------------------------------------------------------------
+var _vy := 0.0
+
+## Déplacement avec gravité : le héros suit le relief (collines, berges).
+func _slide(delta: float) -> void:
+	_vy = -1.0 if is_on_floor() else _vy - 28.0 * delta
+	velocity.y = _vy
+	move_and_slide()
+
 func _physics_process(delta: float) -> void:
 	for i in cd_left.size(): cd_left[i] = maxf(cd_left[i] - delta, 0.0)
 	energy = minf(energy + 7.0 * delta, max_energy)
@@ -199,14 +209,13 @@ func _physics_process(delta: float) -> void:
 	if _dash_t > 0.0:
 		_dash_t -= delta
 		velocity = _dash_vel
-		move_and_slide()
+		_slide(delta)
 		return
 
 	if _action_t > 0.0:
 		_action_t -= delta
 		velocity = velocity.move_toward(Vector3.ZERO, 40.0 * delta)
-		velocity.y = 0
-		move_and_slide()
+		_slide(delta)
 		if _action_t <= 0.0: _action = ""
 		return
 
@@ -231,8 +240,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity = Vector3.ZERO
 		_play("Sword_Idle", 0.25)
-	velocity.y = 0
-	move_and_slide()
+	_slide(delta)
 
 func _face(dir: Vector3, delta: float, rate: float) -> void:
 	if dir.length() < 0.01: return

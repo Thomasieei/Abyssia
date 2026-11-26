@@ -48,6 +48,7 @@ var _timer := 0.0
 var _look_t := 0.0
 var _col: CollisionShape3D
 var _atk_cd := 0.0
+var _vy := 0.0
 var _num_stack := 0
 var _num_t := 0
 
@@ -65,6 +66,8 @@ func _ready() -> void:
 	add_to_group("enemy")
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4
+	floor_snap_length = 0.6
+	floor_max_angle = deg_to_rad(48.0)
 	global_position = home
 	rotation.y = home_yaw
 	_col = CollisionShape3D.new()
@@ -409,7 +412,8 @@ func _target_ok() -> bool:
 func _move(v: Vector3, delta: float) -> void:
 	_push = _push.move_toward(Vector3.ZERO, 30.0 * delta)
 	velocity = v + _push
-	velocity.y = 0
+	_vy = -1.0 if is_on_floor() else _vy - 28.0 * delta
+	velocity.y = _vy
 	move_and_slide()
 
 func _settle(delta: float) -> void:

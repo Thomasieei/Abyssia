@@ -56,6 +56,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Les effets au sol en mélange additif deviennent blancs sur l'herbe claire : mélange normal.
 - Test : attendre la capture (`await _shot`) avant l'étape suivante.
 - Ne pas placer de grand bâtiment juste au sud du point d'apparition (la caméra regarde du sud).
+- Relief : tout se pose avec `main.h(x, z)` (décor, herbe, lin, monstres, effets au sol). Les chemins, camps et le bourg restent plats. Les rayons de collision du décor sont des rayons de base (multipliés par l'échelle) : rester vers 0,85 pour les gros rochers.
+- Les grands arbres tordus (TwistedTree) ont une couronne énorme : échelle 0,75 au plus près des zones de passage.
+- `ABY_TEST=relief` : captures de la crête nord, des falaises est, des collines ouest et de l'étang.
 
 ## Retours du créateur (à appliquer en priorité)
 
@@ -65,7 +68,8 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 ## Atelier de nuit
 
 Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
-Dernier chantier fait : 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore). Prochain : relief, eau et falaises de la clairière.
+Derniers chantiers faits : 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
+Prochain : combat riche — d'abord un boss dans un repaire au nord (phases, attaques annoncées au sol, butin rare), puis réactions des monstres aux coups, contres et esquives.
 
 ## Plus tard (idées en attente)
 

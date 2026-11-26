@@ -13,6 +13,11 @@ var _fps_n := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
+	if OS.get_environment("ABY_TEST") == "relief":
+		steps = [["tp", Vector3(18, 0, -25)], ["wait", 1.5], ["shot", "crete_nord"], ["tp", Vector3(20, 0, -6)], ["wait", 1.0], ["shot", "falaises_est"],
+			["tp", Vector3(-24, 0, 12)], ["wait", 1.0], ["shot", "collines_ouest"], ["tp", Vector3(-21, 0, -4)], ["wait", 1.0], ["shot", "etang_proche"]]
+		_next()
+		return
 	if OS.get_environment("ABY_TEST") == "perf":
 		steps = [["wait", 4.0], ["report"], ["walk", Vector3(0.5, 0, 34)], ["walk", Vector3(-3, 0, 18)], ["wait", 4.0], ["report"]]
 		_next()
@@ -37,7 +42,8 @@ func _ready() -> void:
 		["walk", Vector3(0.3, 0, 45)], ["shot", "sortie_bourg"], ["walk", Vector3(0.5, 0, 34)],
 		["walk", Vector3(-3, 0, 18)], ["shot", "chemin"],
 		["walk", Vector3(-10.5, 0, 13.6)], ["wait", 0.3], ["shot", "bouton_recolte"], ["gather"], ["wait", 1.0], ["shot", "recolte"], ["wait", 1.6], ["shot", "recolte_fin"],
-		["walk", Vector3(-1, 0, 4)], ["walk", Vector3(2, 0, -11)], ["shot", "vers_camp"],
+		["walk", Vector3(-14, 0, 2)], ["walk", Vector3(-18, 0, -8)], ["wait", 0.5], ["shot", "etang"],
+		["walk", Vector3(-8, 0, -6)], ["walk", Vector3(2, 0, -11)], ["shot", "vers_camp"],
 		["walk", Vector3(0.5, 0, -14.5)], ["wait", 0.6], ["shot", "alerte"],
 		["attack", 1.2], ["shot", "combat"],
 		["skill", 0], ["wait", 0.32], ["shot", "entaille"],
@@ -46,7 +52,7 @@ func _ready() -> void:
 		["skill", 3], ["skill", 4], ["wait", 0.3], ["shot", "garde_embrasement"],
 		["attack", 2.0], ["skill", 1], ["wait", 0.35], ["shot", "charge"],
 		["fight", 14.0], ["shot", "apres_combat"],
-		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs"],
+		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs_falaises"],
 		["fight", 12.0], ["shot", "rodeurs_combat"],
 		["wait", 1.0], ["shot", "fin"], ["report"],
 	]
@@ -68,6 +74,10 @@ func _next() -> void:
 			var n = _p().nearest_gather()
 			print("TEST gather node=", n != null)
 			if n: _p().start_gather(n)
+			_next()
+		"tp":
+			var v: Vector3 = s[1]
+			_p().global_position = Vector3(v.x, G.world.h(v.x, v.z) + 0.2, v.z)
 			_next()
 		"give":
 			G.give_item("lin", 15); G.give_item("cendre", 2); G.give_item("griffe", 2); G.give_silver(80)

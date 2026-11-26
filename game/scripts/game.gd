@@ -240,7 +240,7 @@ func telegraph(pos: Vector3, yaw: float, shape: int, size: Vector2, color: Color
 	m.material_override = mat
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(m)
-	m.global_position = Vector3(pos.x, 0.06, pos.z)
+	m.global_position = Vector3(pos.x, world.h(pos.x, pos.z) + 0.07, pos.z)
 	m.rotation.y = yaw
 	return m
 
@@ -266,7 +266,7 @@ func ring(pos: Vector3, texname: String, color: Color, from_size: float, to_size
 	m.mesh = q
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(m)
-	m.global_position = Vector3(pos.x, 0.08, pos.z)
+	m.global_position = Vector3(pos.x, world.h(pos.x, pos.z) + 0.09, pos.z)
 	m.scale = Vector3(from_size, 1, from_size)
 	m.rotation.y = randf() * TAU
 	var tw := m.create_tween().set_parallel()

@@ -16,10 +16,17 @@ uniform vec3 square = vec3(0.0, 60.0, 8.5);       // place pavée du bourg : xz 
 uniform vec4 stone_a : source_color = vec4(0.47, 0.43, 0.38, 1.0);
 uniform vec4 stone_b : source_color = vec4(0.3, 0.28, 0.26, 1.0);
 
+uniform vec4 rock_a : source_color = vec4(0.46, 0.42, 0.37, 1.0);
+uniform vec4 rock_b : source_color = vec4(0.32, 0.29, 0.26, 1.0);
+uniform vec4 mud : source_color = vec4(0.25, 0.22, 0.16, 1.0);
+uniform vec4 sand : source_color = vec4(0.55, 0.5, 0.38, 1.0);
+uniform float water_y = -0.55;
 varying vec3 wpos;
+varying vec3 wnrm;
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
 float seg_dist(vec2 p, vec2 a, vec2 b) {
@@ -51,6 +58,16 @@ void fragment() {
 	float cd = length(p - ash_center.xy) - ash_center.z;
 	float camp = 1.0 - smoothstep(-1.5, 1.8, cd + edge * 2.0);
 	col = mix(col, mix(dcol, ash.rgb, 0.35), camp * 0.85);
+	// pentes : la roche affleure, en strates
+	float slope = 1.0 - wnrm.y;
+	float strata = 0.5 + 0.5 * sin(wpos.y * 5.0 + n2 * 4.0);
+	vec3 rock = mix(rock_b.rgb, rock_a.rgb, strata * 0.6 + n3 * 0.4);
+	col = mix(col, rock, smoothstep(0.16, 0.34, slope + (n3 - 0.5) * 0.08));
+	// sommets plus secs
+	col = mix(col, grass_dry.rgb * 0.95, smoothstep(2.5, 5.0, wpos.y) * 0.35 * (1.0 - smoothstep(0.16, 0.3, slope)));
+	// berge de l'étang : boue humide puis sable sous l'eau
+	col = mix(col, mud.rgb, 1.0 - smoothstep(water_y + 0.05, water_y + 0.45, wpos.y));
+	col = mix(col, sand.rgb * 0.8, 1.0 - smoothstep(water_y - 0.6, water_y - 0.1, wpos.y));
 	// pavés de la place (et des allées) : rangées décalées, joints sombres
 	float sq = length(p - square.xy) - square.z;
 	float paved = max(1.0 - smoothstep(-0.6, 0.6, sq + edge * 1.2), path * step(48.0, p.y) * step(p.y, 76.0) * step(abs(p.x), 14.0));
