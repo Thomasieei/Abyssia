@@ -127,6 +127,7 @@ func _build_model() -> void:
 	steel.roughness = 0.32
 	for mi in sword.find_children("*", "MeshInstance3D", true, false):
 		mi.material_override = steel
+	G.character_look(model, {"rim_amount": 0.6, "thick": 0.012, "outline": Color(0.05, 0.035, 0.025)})
 	# Animations Quaternius (même squelette)
 	ap = AnimationPlayer.new()
 	model.add_child(ap)
@@ -235,6 +236,7 @@ func _physics_process(delta: float) -> void:
 		if _step_t <= 0.0:
 			_step_t = 0.31
 			Sfx.play_at("step", global_position, -14.0)
+			G.burst(global_position + Vector3.UP * 0.08, "smoke_04", Color(0.65, 0.58, 0.48, 0.3), 2, 0.6, 0.35, 0.45, 0.3)
 	elif attack_held:
 		_auto_attack(delta)
 	else:

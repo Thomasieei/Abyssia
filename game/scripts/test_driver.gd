@@ -26,7 +26,8 @@ func _ready() -> void:
 		_render_map()
 		return
 	if OS.get_environment("ABY_TEST") == "close":
-		steps = [["wait", 1.0], ["shot", "gros_plan_repos"],
+		steps = [["wait", 1.0], ["shot", "gros_plan_repos"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.6], ["shot", "gros_plan_brutes"],
+			["tp", Vector3(20.5, 0, -3.5)], ["wait", 0.6], ["shot", "gros_plan_rodeurs"], ["tp", Vector3(-17.5, 0, -24.0)], ["wait", 0.6], ["shot", "gros_plan_boss"],
 			]
 		_next()
 		return

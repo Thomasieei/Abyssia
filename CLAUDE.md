@@ -48,7 +48,8 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 
 ## Journal des leçons (ne jamais refaire)
 
-- Modèle de base Quaternius = corps nu : il faut le pack **Modular Character Outfits – Fantasy** (demandé au créateur) ; la tenue de cuir peinte est provisoire.
+- Modèle de base Quaternius = corps nu : il faut le pack **Modular Character Outfits – Fantasy** (demandé au créateur). En attendant, la tenue est **peinte par zones du corps** (tunique, manches, brassards, ceinture, pantalon, bottes) : script Python qui lit le maillage (position au repos → zone) et colorie la texture UV. Normal map désactivée (sinon les muscles transparaissent).
+- Beauté des personnages : `G.character_look()` (contour sombre en coque inversée, liseré de lumière, teinte, lave qui luit et respire). L'appliquer à tout nouveau personnage ou monstre.
 - Épée `Human_Sword.fbx` dans `hand_r` : rotation (0, −90, −90), matériau acier remplacé (texture manquante = rose).
 - Les textures Quaternius sont trop claires sous ce rendu : teinter les rochers (0,66 0,63 0,58), cailloux et bordures.
 - Les panneaux Label3D doivent être `fixed_size` (sinon énormes près de la caméra).
@@ -58,9 +59,10 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Ne pas placer de grand bâtiment juste au sud du point d'apparition (la caméra regarde du sud).
 - Relief : tout se pose avec `main.h(x, z)` (décor, herbe, lin, monstres, effets au sol). Les chemins, camps et le bourg restent plats. Les rayons de collision du décor sont des rayons de base (multipliés par l'échelle) : rester vers 0,85 pour les gros rochers.
 - Les grands arbres tordus (TwistedTree) ont une couronne énorme : échelle 0,75 au plus près des zones de passage.
-- Monstres sans recherche de chemin : contournement automatique quand ils sont bloqués (sinon la sentinelle signale MONSTRE_BLOQUE).
+- Monstres sans recherche de chemin : contournement automatique dans `_move()` quand ils sont bloqués (tous les états) (sinon la sentinelle signale MONSTRE_BLOQUE).
 - `_tint` puis `_dither_tree` : le tramage doit partir du matériau déjà teinté (matériau de surface remplacé).
 - Grand décor près d'une arène (arbres morts, gros rochers) : le tramer ou l'écarter, sinon il cache le combat.
+- `ABY_TEST=close` + `ABY_CLOSE=1` : gros plans du héros, des brutes, des rôdeurs et du boss (vérifier les textures).
 - `ABY_TEST=relief` : captures de la crête nord, des falaises est, des collines ouest et de l'étang.
 
 ## Retours du créateur (à appliquer en priorité)

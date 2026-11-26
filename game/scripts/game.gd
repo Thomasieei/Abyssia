@@ -108,6 +108,7 @@ var real_dt := 0.016         # durée réelle de la dernière image (indépendan
 var _last_us := 0
 
 func _process(_d: float) -> void:
+	_pulse_lava()
 	var now := Time.get_ticks_usec()
 	if _last_us > 0: real_dt = clampf((now - _last_us) / 1000000.0, 0.0, 0.25)
 	_last_us = now
@@ -213,6 +214,7 @@ func number(pos: Vector3, value: int, color: Color, big := false) -> void:
 	l.font_size = 44
 	l.outline_size = 12
 	l.modulate = color
+	if color.a <= 0.0: l.outline_modulate = Color(0, 0, 0, 0)
 	l.outline_modulate = Color(0, 0, 0, 0.85)
 	l.font = load("res://assets/fonts/DejaVuSansCondensed-Bold.ttf")
 	world.add_child(l)
@@ -352,8 +354,53 @@ func warmup(at: Vector3) -> void:
 	slash(p, 0.0, Color.WHITE)
 	ring(p, "magic_03", Color.WHITE, 1.0, 1.1, 0.3)
 	streak(p, 0.0, Color.WHITE, 0.0)
-	number(p, 1, Color.WHITE)
+	number(p, 1, Color(1, 1, 1, 0.0))
 	for sh in 3:
 		var tl := telegraph(p, 0.0, sh, Vector2(2, 2), Color.WHITE)
 		tl.global_position.y = p.y
 		get_tree().create_timer(0.3, false).timeout.connect(tl.queue_free)
+
+# --- Beauté des personnages -------------------------------------------------------
+var _look_cache := {}
+var _lava_mats: Array[StandardMaterial3D] = []
+
+## Embellit un modèle : contour sombre, liseré de lumière sur les bords, teinte et brillance.
+## opts : tint (Color), rim (Color), rim_amount, outline (Color), thick, rough, lava (bool)
+func character_look(model: Node3D, opts: Dictionary) -> void:
+	var outline := ShaderMaterial.new()
+	outline.shader = preload("res://scripts/outline.gdshader")
+	outline.set_shader_parameter("color", opts.get("outline", Color(0.06, 0.04, 0.03)))
+	outline.set_shader_parameter("thickness", opts.get("thick", 0.018))
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		for si in mi.mesh.get_surface_count():
+			var src: Material = mi.get_surface_override_material(si) if mi.get_surface_override_material(si) else mi.mesh.surface_get_material(si)
+			if not (src is StandardMaterial3D): continue
+			var key := [src, opts.hash()]
+			if not _look_cache.has(key):
+				var m: StandardMaterial3D = src.duplicate()
+				if opts.has("tint") and not ("Glow" in src.resource_name):
+					m.albedo_color = m.albedo_color * opts.tint
+				m.rim_enabled = true
+				m.rim = opts.get("rim_amount", 0.55)
+				m.rim_tint = 0.35
+				if opts.has("rough") and "Skin" in src.resource_name: m.roughness = opts.rough
+				if opts.get("lava", false) and ("Lava" in src.resource_name):
+					m.emission_enabled = true
+					m.emission = Color(1.0, 0.38, 0.06)
+					m.emission_energy_multiplier = 1.4 if "Glow" in src.resource_name else 0.9
+					if m.emission_texture == null and m.albedo_texture and not ("Glow" in src.resource_name):
+						m.emission_energy_multiplier = 0.25
+					_lava_mats.append(m)
+				# le contour suit la peau (squelette) grâce au passage suivant
+				if not ("Eye" in src.resource_name):
+					m.next_pass = outline
+				_look_cache[key] = m
+			mi.set_surface_override_material(si, _look_cache[key])
+
+## Les fissures de lave respirent (une seule mise à jour par matériau partagé).
+func _pulse_lava() -> void:
+	if _lava_mats.is_empty(): return
+	var t := Time.get_ticks_msec() / 1000.0
+	var k := 0.8 + 0.35 * sin(t * 2.2) + 0.15 * sin(t * 5.3)
+	for m in _lava_mats:
+		m.emission_energy_multiplier = (1.6 if "Glow" in m.resource_name else 0.9) * k

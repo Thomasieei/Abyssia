@@ -69,6 +69,7 @@ var _adds: Array = []
 var _rain: Array = []        # zones de la pluie de cendres
 var _boss_aura: CPUParticles3D
 var _vy := 0.0
+var _dust_t := 0.0
 var _detour_t := 0.0
 var _detour_side := Vector3.ZERO
 var _stuck_t := 0.0
@@ -118,6 +119,14 @@ func _ready() -> void:
 						t.emission = Color(1.0, 0.3, 0.05)
 						t.emission_energy_multiplier = 0.35
 					mi.set_surface_override_material(si, t)
+	# rendu soigné : contour, liseré, lave qui luit, peau humide du rôdeur
+	match kind:
+		"brute", "boss":
+			G.character_look(model, {"lava": true, "rim_amount": 0.45, "thick": 0.014, "outline": Color(0.08, 0.03, 0.02)})
+		"rodeur":
+			G.character_look(model, {"tint": Color(0.8, 0.84, 0.95), "rough": 0.22, "rim_amount": 0.7, "thick": 0.016, "outline": Color(0.04, 0.05, 0.09)})
+		"rejeton":
+			G.character_look(model, {"rough": 0.3, "rim_amount": 0.6, "thick": 0.018, "outline": Color(0.12, 0.03, 0.0)})
 	if kind == "boss":
 		_boss_aura = G.aura(self, "flame_02", Color(1.0, 0.35, 0.08, 0.6), 1.4)
 		_boss_aura.emission_ring_radius = 1.6
@@ -256,19 +265,11 @@ func _chase_update(delta: float) -> void:
 		return
 	_play("Run", 0.15, 1.0 if kind == "brute" else 1.2)
 	var dir := to.normalized()
-	# contournement : bloqué par un rocher ou un arbre -> on longe l'obstacle un instant
-	if _detour_t > 0.0:
-		_detour_t -= delta
-		dir = (dir * 0.35 + _detour_side).normalized()
-	elif global_position.distance_to(_last_pos) < data.speed * delta * 0.25:
-		_stuck_t += delta
-		if _stuck_t > 0.35:
-			_stuck_t = 0.0
-			_detour_t = 0.8
-			_detour_side = Vector3(-dir.z, 0, dir.x) * (1.0 if randf() < 0.5 else -1.0)
-	else:
-		_stuck_t = 0.0
-	_last_pos = global_position
+	_dust_t -= delta
+	if _dust_t <= 0.0:
+		_dust_t = 0.32 if kind != "rodeur" else 0.22
+		G.burst(global_position + Vector3.UP * 0.1, "smoke_04", Color(0.62, 0.55, 0.45, 0.35), 2, 0.8, 0.5 * data.scale, 0.5, 0.3)
+		if kind == "brute" or kind == "boss": Sfx.play_at("step", global_position, -10.0, 0.6)
 	_move(dir * data.speed, delta)
 	_turn_to(global_position + dir, delta, 10.0)
 
@@ -501,6 +502,21 @@ func _target_ok() -> bool:
 	return target != null and is_instance_valid(target) and not target.dead
 
 func _move(v: Vector3, delta: float) -> void:
+	# contournement : bloqué par un rocher ou un arbre -> on longe l'obstacle un instant
+	if v.length() > 0.5:
+		if _detour_t > 0.0:
+			_detour_t -= delta
+			v = (v.normalized() * 0.35 + _detour_side).normalized() * v.length()
+		elif global_position.distance_to(_last_pos) < v.length() * delta * 0.25:
+			_stuck_t += delta
+			if _stuck_t > 0.3:
+				_stuck_t = 0.0
+				_detour_t = 0.8
+				var n := v.normalized()
+				_detour_side = Vector3(-n.z, 0, n.x) * (1.0 if randf() < 0.5 else -1.0)
+		else:
+			_stuck_t = 0.0
+	_last_pos = global_position
 	_push = _push.move_toward(Vector3.ZERO, 30.0 * delta)
 	velocity = v + _push
 	_vy = -1.0 if is_on_floor() else _vy - 28.0 * delta
