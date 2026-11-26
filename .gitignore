@@ -1,3 +1,6 @@
 game/.godot/
+.godot/
 build/
 *.apk
+*.tmp
+raw_anims/

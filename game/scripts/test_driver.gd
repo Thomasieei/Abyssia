@@ -1,142 +1,121 @@
 extends Node
-# Pilote de test (activé seulement avec la variable d'environnement ABY_TEST).
-# Joue réellement : frappe, achète, ouvre chaque page, lance donjon/abysse/arène et capture l'écran.
-
-var main
-var n = 0
-const OUT := "/tmp/shots/"
+## Test joué automatiquement (ABY_TEST=proto) : on joue vraiment et on prend des captures.
+var steps: Array = []
+var _i := -1
+var _t := 0.0
+var _goal := Vector3.ZERO
+var _mode := ""
+var _shot_n := 0
+var _frames := 0
+var _fps_acc := 0.0
+var _fps_n := 0
 
 func _ready() -> void:
-	DirAccess.make_dir_recursive_absolute(OUT)
-	main = get_parent()
-	_run.call_deferred()
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	DirAccess.make_dir_recursive_absolute("/tmp/shots")
+	if OS.get_environment("ABY_TEST") == "close":
+		steps = [["wait", 1.0], ["shot", "gros_plan_repos"],
+			]
+		_next()
+		return
+	steps = [
+		["wait", 1.5], ["shot", "depart"],
+		["walk", Vector3(-3, 0, 18)], ["shot", "chemin"],
+		["walk", Vector3(-10.5, 0, 13.6)], ["gather"], ["wait", 1.0], ["shot", "recolte"], ["wait", 1.6], ["shot", "recolte_fin"],
+		["walk", Vector3(-1, 0, 4)], ["walk", Vector3(2, 0, -11)], ["shot", "vers_camp"],
+		["walk", Vector3(0.5, 0, -14.5)], ["wait", 0.6], ["shot", "alerte"],
+		["attack", 1.2], ["shot", "combat"],
+		["skill", 0], ["wait", 0.32], ["shot", "entaille"],
+		["attack", 1.0], ["wait_tele"], ["shot", "zone_ennemie"],
+		["skill", 2], ["wait", 0.53], ["shot", "fracas"], ["wait", 1.4],
+		["skill", 3], ["wait", 0.3], ["shot", "garde"],
+		["attack", 2.0], ["skill", 1], ["wait", 0.35], ["shot", "charge"],
+		["fight", 14.0], ["shot", "apres_combat"],
+		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs"],
+		["fight", 12.0], ["shot", "rodeurs_combat"],
+		["wait", 1.0], ["shot", "fin"], ["report"],
+	]
+	_next()
 
-func shot(name: String) -> void:
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var img = get_viewport().get_texture().get_image()
-	n += 1
-	img.save_png(OUT + "%02d_%s.png" % [n, name])
-	print("SHOT ", name)
+func _p() -> Node: return G.player
 
-func wait(sec: float) -> void:
-	await get_tree().create_timer(sec).timeout
+func _next() -> void:
+	_i += 1
+	_t = 0.0
+	if _i >= steps.size():
+		get_tree().quit()
+		return
+	var s: Array = steps[_i]
+	_mode = s[0]
+	match _mode:
+		"walk": _goal = s[1]
+		"gather":
+			var n = _p().nearest_gather()
+			print("TEST gather node=", n != null)
+			if n: _p().start_gather(n)
+			_next()
+		"skill":
+			var ok = _p().try_skill(s[1])
+			print("TEST skill ", s[1], " ok=", ok)
+			_next()
+		"shot": _shot(s[1]); _next()
+		"report":
+			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
+			for e in G.enemies: print("TEST enemy ", e.kind, " etat=", e.state_name(), " hp=", int(e.hp))
+			_next()
 
-func taps(sec: float, rate := 6.0) -> void:
-	var t = 0.0
-	while t < sec:
-		var ev = InputEventMouseButton.new()
-		ev.button_index = MOUSE_BUTTON_LEFT
-		ev.pressed = true
-		ev.position = Vector2(500, 380)
-		main._on_battle_input(ev)
-		await wait(1.0 / rate)
-		t += 1.0 / rate
+func _shot(name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	_shot_n += 1
+	var path := "/tmp/shots/%02d_%s.png" % [_shot_n, name]
+	img.save_png(path)
+	print("SHOT ", path)
 
-func _run() -> void:
-	var phase = OS.get_environment("ABY_TEST")
-	await wait(1.0)
-	if phase == "fresh":
-		await shot("creation")
-		main.pages._new_cls = "mage"
-		main.pages.popup_create_hero()
-		await shot("creation_mage")
-		G.s.cls = "mage"
-		G.set_name_checked("Testeur")
-		G.mark()
-		main.setup_hero()
-		main.clear_overlay()
-		await wait(0.5)
-		await shot("debut_combat")
-		await taps(6.0)
-		await shot("combat_6s")
-		for i in 40:
-			for id in ["atk", "atk", "tap", "speed"]: G.buy_train(id, 1)
-			await taps(0.5)
-		await shot("apres_entrainement")
-		print("STATE gi=", G.gi(), " lvl=", G.s.level, " gold=", G.s.gold)
-	elif phase == "pages":
-		# Profil avancé pour remplir toutes les pages
-		G.s.cls = "barbare"
-		G.set_name_checked("Testeur")
-		main.setup_hero()
-		main.clear_overlay()
-		G.s.gold = 1e9
-		G.s.gems = 2000
-		G.s.ore = 50000
-		G.s.souls = 500
-		G.s.level = 60
-		G.s.max_gi = 80
-		G.s.run_max_gi = 45
-		G.s.map = 5
-		G.s.stage = 3
-		G.s.keys = 5
-		G.s.eggs = [3, 2, 2]
-		for i in 25: G.add_item(G.make_item(40 + i, i % 6, 0.5))
-		G.equip_best()
-		for i in 6: G.hatch(i % 3)
-		G.s.c.kills = 2500.0
-		G.s.best = {"zombie": 1500.0, "squelette": 300.0, "fantome": 120.0, "orc": 40.0}
-		G.s.secrets = {"s_nuit": true, "s_dore": true}
-		G.mark()
-		main.cur_theme = -1
-		main._apply_theme()
-		G.spawn()
-		await wait(1.0)
-		await taps(2.0)
-		for p in ["train", "hero", "equip", "pets", "dj", "arena", "menu", "asc", "quests", "ach", "best", "secrets", "shop", "maps", "options", "rank"]:
-			main.show_page(p)
-			await wait(0.7)
-			await shot("page_" + p)
-		main.show_page("equip")
-		await wait(0.3)
-		main.pages.item_popup(G.s.inv[0])
-		await shot("popup_objet")
-		main.clear_overlay()
-		main.pages._hatch(0)
-		await shot("popup_eclosion")
-		main.clear_overlay()
-		main.pages.pet_popup(G.s.pets[0])
-		await shot("popup_familier")
-		main.clear_overlay()
-		# Boss
-		G.set_stage(5, 10)
-		G.s.kills = 10
-		G.spawn()
-		await wait(1.5)
-		await shot("boss")
-		# Donjon
-		G.stop_run()
-		G.start_dungeon(D.DUNGEONS[0], 1)
-		await taps(3.0)
-		await shot("donjon")
-		await taps(15.0, 8.0)
-		await shot("donjon_fin")
-		main.clear_overlay()
-		# Abysse
-		G.stop_run()
-		G.start_abyss()
-		await taps(4.0)
-		await shot("abysse")
-		G.abandon_run()
-		await wait(0.5)
-		main.clear_overlay()
-		# Arène contre IA
-		main.show_page("arena")
-		main.pages.opps = G.bot_opponents()
-		main.pages.refresh()
-		await wait(0.5)
-		await shot("arene_liste")
-		main.pages.fight(main.pages.opps[0])
-		await wait(2.0)
-		await shot("arene_combat")
-		await wait(25.0)
-		await shot("arene_resultat")
-		main.clear_overlay()
-		# Ascension
-		main.show_page("asc")
-		main.pages._confirm_ascend()
-		await shot("ascension_confirm")
-		main.clear_overlay()
-	print("TEST FINI")
-	get_tree().quit()
+func _process(delta: float) -> void:
+	var real := delta / maxf(Engine.time_scale, 0.01)
+	_frames += 1
+	if _frames > 30:
+		_fps_acc += 1.0 / maxf(real, 0.0001)
+		_fps_n += 1
+	if _i < 0 or _i >= steps.size(): return
+	_t += real
+	var s: Array = steps[_i]
+	var p = _p()
+	match _mode:
+		"wait":
+			if _t >= s[1]: _next()
+		"walk":
+			var to: Vector3 = _goal - p.global_position
+			to.y = 0
+			if to.length() < 0.8 or _t > 12.0:
+				p.move_input = Vector2.ZERO
+				if _t > 12.0: print("TEST walk timeout at ", p.global_position)
+				_next()
+			else:
+				var d := to.normalized()
+				p.move_input = Vector2(d.x, d.z)
+		"attack":
+			p.attack_held = true
+			if _t >= s[1]:
+				p.attack_held = false
+				_next()
+		"wait_tele":
+			p.attack_held = true
+			var found := false
+			for e in G.enemies:
+				if e.state_name() == "Attaque": found = true
+			if (found and _t > 0.3) or _t > 5.0:
+				p.attack_held = false
+				_next()
+		"fight":
+			p.attack_held = true
+			var alive := false
+			for e in G.enemies:
+				if not e.dead and e.global_position.distance_to(p.global_position) < 14.0: alive = true
+			if int(_t * 10) % 25 == 0:
+				for k in 3: p.try_skill(k)
+			if not alive or _t >= s[1]:
+				p.attack_held = false
+				print("TEST fight end t=", snappedf(_t, 0.1))
+				_next()
