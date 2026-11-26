@@ -12,6 +12,9 @@ uniform vec4 segs[24];      // segments de chemin : (ax, az, bx, bz)
 uniform float seg_w[24];    // demi-largeur de chaque segment
 uniform int seg_n = 0;
 uniform vec3 ash_center = vec3(0.0, 0.0, -22.0); // xz + rayon : sol piétiné du camp
+uniform vec3 square = vec3(0.0, 60.0, 8.5);       // place pavée du bourg : xz + rayon
+uniform vec4 stone_a : source_color = vec4(0.47, 0.43, 0.38, 1.0);
+uniform vec4 stone_b : source_color = vec4(0.3, 0.28, 0.26, 1.0);
 
 varying vec3 wpos;
 
@@ -48,6 +51,19 @@ void fragment() {
 	float cd = length(p - ash_center.xy) - ash_center.z;
 	float camp = 1.0 - smoothstep(-1.5, 1.8, cd + edge * 2.0);
 	col = mix(col, mix(dcol, ash.rgb, 0.35), camp * 0.85);
+	// pavés de la place (et des allées) : rangées décalées, joints sombres
+	float sq = length(p - square.xy) - square.z;
+	float paved = max(1.0 - smoothstep(-0.6, 0.6, sq + edge * 1.2), path * step(48.0, p.y) * step(p.y, 76.0) * step(abs(p.x), 14.0));
+	if (paved > 0.001) {
+		vec2 sp = p * vec2(1.15, 1.5);
+		sp.x += floor(sp.y) * 0.5;
+		vec2 g = fract(sp);
+		float e = min(min(g.x, 1.0 - g.x) * 1.3, min(g.y, 1.0 - g.y));
+		float tile = texture(noise_tex, floor(sp) * 0.137).r;
+		vec3 stone = mix(stone_b.rgb, stone_a.rgb, tile) * (0.8 + n3 * 0.3) * (0.85 + n2 * 0.25);
+		stone = mix(stone * 0.55, stone, smoothstep(0.04, 0.12, e));
+		col = mix(col, stone, paved);
+	}
 	ALBEDO = col;
 	ROUGHNESS = 1.0;
 }

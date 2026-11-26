@@ -48,6 +48,8 @@ var _timer := 0.0
 var _look_t := 0.0
 var _col: CollisionShape3D
 var _atk_cd := 0.0
+var _num_stack := 0
+var _num_t := 0
 
 func setup(k: String, pos: Vector3, yaw: float) -> void:
 	kind = k
@@ -355,7 +357,11 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 	var st := state_name()
 	if st == "Retour": dmg *= 0.25
 	hp -= dmg
-	var top: Vector3 = global_position + Vector3.UP * (2.1 * data.scale)
+	# chiffres empilés : jamais l'un sur l'autre
+	var now := Time.get_ticks_msec()
+	_num_stack = _num_stack + 1 if now - _num_t < 450 else 0
+	_num_t = now
+	var top: Vector3 = global_position + Vector3.UP * (2.1 * data.scale + 0.42 * (_num_stack % 4))
 	G.number(top, int(dmg), Color(1, 0.92, 0.55) if not heavy else Color(1, 0.7, 0.25), heavy)
 	var d := global_position - from
 	d.y = 0

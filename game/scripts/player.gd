@@ -19,14 +19,18 @@ var target: Node3D = null
 
 ## Sorts : nom, recharge, animation
 ## Emplacements façon Albion : 3 sorts d'arme (Q W E), casque (R), plastron (D), bottes (F)
-var skills := [
-	{"id": "entaille", "slot": "arme", "name": "Entaille", "cd": 4.0, "cost": 14.0},
-	{"id": "charge", "slot": "arme", "name": "Charge", "cd": 9.0, "cost": 22.0},
-	{"id": "fracas", "slot": "arme", "name": "Fracas", "cd": 16.0, "cost": 38.0},
-	{"id": "garde", "slot": "casque", "name": "Garde du gardien", "cd": 22.0, "cost": 30.0},
-	{"id": "fureur", "slot": "plastron", "name": "Fureur", "cd": 26.0, "cost": 30.0},
-	{"id": "vent", "slot": "bottes", "name": "Pas de vent", "cd": 14.0, "cost": 18.0},
-]
+const SPELLS := {
+	"entaille": {"name": "Entaille", "cd": 4.0, "cost": 14.0},
+	"charge": {"name": "Charge", "cd": 9.0, "cost": 22.0},
+	"fracas": {"name": "Fracas", "cd": 16.0, "cost": 38.0},
+	"garde": {"name": "Garde du gardien", "cd": 22.0, "cost": 30.0},
+	"souffle": {"name": "Souffle clair", "cd": 18.0, "cost": 26.0},
+	"fureur": {"name": "Fureur", "cd": 26.0, "cost": 30.0},
+	"embrase": {"name": "Embrasement", "cd": 20.0, "cost": 32.0},
+	"vent": {"name": "Pas de vent", "cd": 14.0, "cost": 18.0},
+	"roulade": {"name": "Roulade", "cd": 6.0, "cost": 12.0},
+}
+var skills: Array = []
 var cd_left := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var max_energy := 200.0
 var energy := 200.0
@@ -68,6 +72,8 @@ func _ready() -> void:
 	_spawn = global_position
 	_build_model()
 	_build_bubble()
+	_rebuild_skills()
+	G.gear_changed.connect(_rebuild_skills)
 	_aura = G.aura(self, "flame_02", Color(1.0, 0.28, 0.12, 0.55), 0.9)
 	_wind = G.aura(self, "smoke_04", Color(0.75, 1.0, 0.85, 0.35), 0.5)
 	_rune = G.ground_quad(self, "magic_03", Color(1.0, 0.82, 0.4, 0.0), 3.2)
@@ -126,6 +132,19 @@ func _build_model() -> void:
 	ap.add_animation_library("h", load("res://assets/anims/hero_anims.res"))
 	ap.playback_default_blend_time = 0.15
 	_play("Sword_Idle")
+
+## Les 3 premiers sorts viennent de l'arme, les 3 suivants du casque, du plastron et des bottes portés.
+func _rebuild_skills() -> void:
+	var ids := ["entaille", "charge", "fracas"]
+	for slot in ["casque", "plastron", "bottes"]:
+		ids.append(G.GEAR[G.equipped[slot]].spell)
+	var old := skills.duplicate()
+	skills = []
+	for i in ids.size():
+		var d: Dictionary = SPELLS[ids[i]].duplicate()
+		d["id"] = ids[i]
+		skills.append(d)
+		if old.size() > i and old[i]["id"] != ids[i]: cd_left[i] = 0.0
 
 func _build_bubble() -> void:
 	_bubble = MeshInstance3D.new()
@@ -312,9 +331,15 @@ func try_skill(slot: int) -> bool:
 		1:
 			if not _skill_charge(): return false
 		2: _skill_fracas()
-		3: _skill_garde()
-		4: _skill_fureur()
-		5: _skill_vent()
+		_:
+			match skills[slot]["id"]:
+				"garde": _skill_garde()
+				"souffle": _skill_souffle()
+				"fureur": _skill_fureur()
+				"embrase": _skill_embrase()
+				"vent": _skill_vent()
+				"roulade":
+					if not _skill_roulade(): return false
 	energy -= skills[slot]["cost"]
 	cd_left[slot] = skills[slot]["cd"]
 	cast.emit(slot, skills[slot]["cd"])
@@ -421,10 +446,55 @@ func _skill_vent() -> void:
 	G.burst(global_position + Vector3.UP * 0.4, "smoke_04", Color(0.85, 1.0, 0.9, 0.6), 14, 3.0, 0.8, 0.5, 0.0)
 	Sfx.play_at("swing", global_position, -6.0, 1.4)
 
+var _burn_t := 0.0
+var _num_stack := 0
+var _num_t := 0
+var _burn_tick := 0.0
+var _invuln_t := 0.0
+
+func _skill_souffle() -> void:
+	var heal := max_hp * 0.22
+	hp = minf(hp + heal, max_hp)
+	G.number(global_position + Vector3.UP * 2.3, int(heal), Color(0.5, 1.0, 0.55), true)
+	G.ring(global_position, "magic_03", Color(0.45, 1.0, 0.6, 0.9), 1.0, 5.0, 0.6)
+	G.burst(global_position + Vector3.UP * 0.5, "light_01", Color(0.6, 1.0, 0.7, 0.8), 18, 2.5, 0.6, 0.9, 2.5)
+	Sfx.play_at("pickup", global_position, -2.0, 1.3)
+	hp_changed.emit(hp, max_hp, shield)
+
+func _skill_embrase() -> void:
+	_burn_t = 5.0
+	_burn_tick = 0.0
+	_aura.emitting = true
+	G.ring(global_position, "circle_05", Color(1.0, 0.45, 0.1, 0.9), 0.8, 7.0, 0.5)
+	Sfx.play_at("slam", global_position, -6.0, 1.3)
+
+func _skill_roulade() -> bool:
+	var dir := Vector3(move_input.x, 0, move_input.y)
+	if dir.length() < 0.2: dir = forward()
+	dir = dir.normalized()
+	face_now(global_position + dir)
+	_replay("Roll", 0.05, 1.5)
+	_dash_vel = dir * 11.0
+	_dash_t = 0.45
+	_invuln_t = 0.5
+	G.burst(global_position + Vector3.UP * 0.3, "smoke_04", Color(0.85, 0.8, 0.7, 0.6), 10, 2.0, 0.8, 0.5, 0.0)
+	Sfx.play_at("swing", global_position, -8.0, 0.8)
+	return true
+
 func _tick_buffs(delta: float) -> void:
+	_invuln_t = maxf(_invuln_t - delta, 0.0)
+	if _burn_t > 0.0:
+		_burn_t -= delta
+		_burn_tick -= delta
+		if _burn_tick <= 0.0:
+			_burn_tick = 0.5
+			var n := _hit_circle(global_position, 3.2, BASE_DMG * 0.5, 0.2, 0.0)
+			G.ring(global_position, "flame_04", Color(1.0, 0.4, 0.1, 0.55), 2.0, 6.5, 0.45)
+			if n > 0: Sfx.play_at("hit", global_position, -10.0, 1.4)
+		if _burn_t <= 0.0 and _fury_t <= 0.0: _aura.emitting = false
 	if _fury_t > 0.0:
 		_fury_t -= delta
-		if _fury_t <= 0.0: _aura.emitting = false
+		if _fury_t <= 0.0 and _burn_t <= 0.0: _aura.emitting = false
 	if _haste_t > 0.0:
 		_haste_t -= delta
 		if _haste_t <= 0.0: _wind.emitting = false
@@ -436,10 +506,11 @@ func _tick_buffs(delta: float) -> void:
 		_rune.visible = false
 
 func buff_left(i: int) -> float:
-	match i:
-		3: return _shield_t
-		4: return _fury_t
-		5: return _haste_t
+	match skills[i]["id"]:
+		"garde": return _shield_t
+		"fureur": return _fury_t
+		"embrase": return _burn_t
+		"vent": return _haste_t
 	return 0.0
 
 func _tick_shield(delta: float) -> void:
@@ -478,16 +549,23 @@ func _hit_circle(center: Vector3, radius: float, dmg: float, knock: float, stun:
 # --- Dégâts reçus --------------------------------------------------------
 func take_hit(dmg: float, from: Vector3, knock := 0.0) -> void:
 	if dead: return
+	if _invuln_t > 0.0:
+		G.burst(global_position + Vector3.UP, "smoke_04", Color(0.9, 0.9, 0.9, 0.5), 6, 2.0, 0.5, 0.3, 0.0)
+		return
 	_last_hurt = Time.get_ticks_msec() / 1000.0
 	_stop_gather()
+	var now := Time.get_ticks_msec()
+	_num_stack = _num_stack + 1 if now - _num_t < 450 else 0
+	_num_t = now
+	var ny := 2.2 + 0.42 * (_num_stack % 4)
 	if shield > 0.0:
 		var absorbed := minf(shield, dmg)
 		shield -= absorbed
 		dmg -= absorbed
-		G.number(global_position + Vector3.UP * 2.2, int(absorbed), Color(1, 0.85, 0.4))
+		G.number(global_position + Vector3.UP * ny, int(absorbed), Color(1, 0.85, 0.4))
 	if dmg > 0.0:
 		hp = maxf(hp - dmg, 0.0)
-		G.number(global_position + Vector3.UP * 2.2, int(dmg), Color(1, 0.3, 0.25), true)
+		G.number(global_position + Vector3.UP * (ny + 0.42), int(dmg), Color(1, 0.3, 0.25), true)
 	G.shake(0.35)
 	Sfx.play_at("flesh", global_position, -2.0, 0.9)
 	G.burst(global_position + Vector3.UP * 1.2, "spark_04", Color(1, 0.4, 0.3, 1), 8, 3.5, 0.35, 0.3)

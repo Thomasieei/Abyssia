@@ -19,7 +19,15 @@ func _ready() -> void:
 		_next()
 		return
 	steps = [
-		["wait", 1.5], ["shot", "depart"],
+		["wait", 1.5], ["shot", "bourg"],
+		["walk", Vector3(-3.5, 0, 62.5)], ["walk", Vector3(-5.6, 0, 58)], ["wait", 0.3], ["shot", "poste_tisser"],
+		["give"], ["panel", 0], ["shot", "panneau_tisser"],
+		["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["shot", "tissu_fait"], ["close"],
+		["walk", Vector3(4.6, 0, 61.5)], ["walk", Vector3(5.6, 0, 60)], ["panel", 1], ["shot", "panneau_forge"],
+		["actid", "plastron_cendre"], ["wait", 2.1], ["actid", "bottes_rodeur"], ["wait", 2.0], ["shot", "forge_faite"], ["close"],
+		["wait", 0.3], ["shot", "nouveaux_sorts"],
+		["walk", Vector3(0, 0, 52.5)], ["panel", 2], ["shot", "panneau_marche"], ["act", 0], ["wait", 0.3], ["close"],
+		["walk", Vector3(0.3, 0, 45)], ["shot", "sortie_bourg"], ["walk", Vector3(0.5, 0, 34)],
 		["walk", Vector3(-3, 0, 18)], ["shot", "chemin"],
 		["walk", Vector3(-10.5, 0, 13.6)], ["wait", 0.3], ["shot", "bouton_recolte"], ["gather"], ["wait", 1.0], ["shot", "recolte"], ["wait", 1.6], ["shot", "recolte_fin"],
 		["walk", Vector3(-1, 0, 4)], ["walk", Vector3(2, 0, -11)], ["shot", "vers_camp"],
@@ -28,7 +36,7 @@ func _ready() -> void:
 		["skill", 0], ["wait", 0.32], ["shot", "entaille"],
 		["attack", 1.0], ["wait_tele"], ["shot", "zone_ennemie"],
 		["skill", 2], ["wait", 0.53], ["shot", "fracas"], ["wait", 1.4],
-		["skill", 3], ["skill", 4], ["skill", 5], ["wait", 0.3], ["shot", "garde_fureur_vent"],
+		["skill", 3], ["skill", 4], ["wait", 0.3], ["shot", "garde_embrasement"],
 		["attack", 2.0], ["skill", 1], ["wait", 0.35], ["shot", "charge"],
 		["fight", 14.0], ["shot", "apres_combat"],
 		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs"],
@@ -54,6 +62,26 @@ func _next() -> void:
 			print("TEST gather node=", n != null)
 			if n: _p().start_gather(n)
 			_next()
+		"give":
+			G.give_item("lin", 15); G.give_item("cendre", 2); G.give_item("griffe", 2); G.give_silver(80)
+			_next()
+		"panel":
+			G.hud.get_child(0).open_panel(G.stations[s[1]])
+			_next()
+		"close":
+			G.hud.get_child(0).do_action(["close"])
+			_next()
+		"act":
+			var rows: Array = G.hud.get_child(0)._panel_rows()
+			print("TEST act ", rows[s[1]][0], " actif=", rows[s[1]][4])
+			G.hud.get_child(0).do_action(rows[s[1]][5])
+			_next()
+		"actid":
+			for r in G.RECIPES.forge:
+				if r.out == s[1]:
+					print("TEST forge ", s[1], " possible=", G.can_craft(r))
+					G.hud.get_child(0).do_action(["craft", r])
+			_next()
 		"skill":
 			var ok = _p().try_skill(s[1])
 			print("TEST skill ", s[1], " ok=", ok)
@@ -62,6 +90,7 @@ func _next() -> void:
 			await _shot(s[1])
 			_next()
 		"report":
+			print("TEST equipement ", G.equipped)
 			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
 			for e in G.enemies: print("TEST enemy ", e.kind, " etat=", e.state_name(), " hp=", int(e.hp))
 			_next()

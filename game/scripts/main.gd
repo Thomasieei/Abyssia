@@ -10,6 +10,8 @@ const Hud := preload("res://scripts/hud.gd")
 const N := "res://assets/nature/%s.gltf"
 const P := "res://assets/props/%s.gltf"
 const HALF := 38.0
+const Z_MAX := 86.0          # le bourg prolonge la carte vers le sud
+const Town := preload("res://scripts/town.gd")
 
 # Chemins de terre : segments (ax, az, bx, bz, demi-largeur)
 const PATHS := [
@@ -17,6 +19,9 @@ const PATHS := [
 	[3, 3, 4, -4, 1.4], [4, -4, 1, -12, 1.5], [1, -12, 0, -17, 1.7],
 	[4, -4, 12, -6, 1.1], [12, -6, 18, -8, 1.0],
 	[-2, 12, -9, 14, 0.8], [-9, 14, -13, 11, 0.7],
+	# route du bourg et allées vers les portes
+	[0, 36, 0.3, 45, 1.6], [0.3, 45, 0, 52, 1.8], [-6.3, 58, -2, 58.5, 1.1], [6.3, 60, 2, 60, 1.1], [0, 71.5, 0, 64, 1.3],
+	[-8, 70, -4, 66, 0.8], [8, 72, 4, 66, 0.8], [-7, 47, -3, 50, 0.8], [7, 47, 3, 50, 0.8],
 ]
 
 # Décor posé à la main : [modèle, x, z, angle°, échelle, collision(rayon, 0 = aucune)]
@@ -101,6 +106,9 @@ func _ready() -> void:
 	for d in DECOR: _place(N % d[0], d)
 	for d in CAMP: _place(P % d[0], d)
 	_build_campfire(Vector3(0, 0, -24))
+	var town: Node = Town.new()
+	add_child(town)
+	town.build(self)
 	_build_grass()
 	for f in FLAX:
 		var g: Node3D = GatherNode.new()
@@ -156,7 +164,8 @@ func _build_environment() -> void:
 func _build_ground() -> void:
 	var m := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(HALF * 2 + 40, HALF * 2 + 40)
+	pm.size = Vector2(HALF * 2 + 40, HALF + Z_MAX + 40)
+	m.position.z = (Z_MAX - HALF) * 0.5
 	pm.subdivide_width = 1
 	pm.subdivide_depth = 1
 	m.mesh = pm
@@ -192,12 +201,15 @@ func _build_ground() -> void:
 func _build_bounds() -> void:
 	var body := StaticBody3D.new()
 	add_child(body)
-	for side in [Vector3(0, 0, -HALF), Vector3(0, 0, HALF), Vector3(-HALF, 0, 0), Vector3(HALF, 0, 0)]:
+	var zc := (Z_MAX - HALF) * 0.5
+	var zl := HALF + Z_MAX
+	for w in [[Vector3(0, 3, -HALF * 0.92), Vector3(2 * HALF + 4, 6, 2)], [Vector3(0, 3, Z_MAX - 3.0), Vector3(2 * HALF + 4, 6, 2)],
+			[Vector3(-HALF * 0.92, 3, zc), Vector3(2, 6, zl)], [Vector3(HALF * 0.92, 3, zc), Vector3(2, 6, zl)]]:
 		var cs := CollisionShape3D.new()
 		var b := BoxShape3D.new()
-		b.size = Vector3(2 * HALF + 4, 6, 2) if side.x == 0 else Vector3(2, 6, 2 * HALF + 4)
+		b.size = w[1]
 		cs.shape = b
-		cs.position = side * 0.92 + Vector3.UP * 3
+		cs.position = w[0]
 		body.add_child(cs)
 
 # Pose d'un élément de décor (avec collision cylindrique éventuelle)
@@ -225,18 +237,19 @@ func _place(path: String, d: Array) -> void:
 
 ## Les feuillages proches de la caméra (donc entre elle et le héros) s'effacent en tramage :
 ## aucun calcul par image, aucun tri de transparence.
-func _dither_tree(n: Node3D) -> void:
+func _dither_tree(n: Node3D, dmin := 9.0, dmax := 13.0) -> void:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		for si in mi.mesh.get_surface_count():
 			var src: Material = mi.mesh.surface_get_material(si)
 			if not (src is StandardMaterial3D): continue
-			if not _dither_mats.has(src):
+			var key := [src, dmin]
+			if not _dither_mats.has(key):
 				var m: StandardMaterial3D = src.duplicate()
 				m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
-				m.distance_fade_min_distance = 9.0
-				m.distance_fade_max_distance = 13.0
-				_dither_mats[src] = m
-			mi.set_surface_override_material(si, _dither_mats[src])
+				m.distance_fade_min_distance = dmin
+				m.distance_fade_max_distance = dmax
+				_dither_mats[key] = m
+			mi.set_surface_override_material(si, _dither_mats[key])
 
 var _tint_mats := {}
 func _tint(n: Node3D, c: Color) -> void:
@@ -333,7 +346,7 @@ func _build_grass() -> void:
 # --- Personnages -----------------------------------------------------------
 func _spawn_player() -> void:
 	player = Player.new()
-	player.position = Vector3(0.5, 0, 30)
+	player.position = Vector3(0, 0, 63.0)
 	add_child(player)
 	player.rotation.y = 0.0
 	G.player = player

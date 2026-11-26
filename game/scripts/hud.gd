@@ -26,14 +26,22 @@ var _sb_cache: StyleBoxFlat
 var show_debug := true
 
 # couleur et texture de fond de chaque sort (reconnaissable en un coup d'œil)
-const SKILL_STYLE := [
-	{"col": Color(1.0, 0.42, 0.2), "tex": "slash_02"},   # Entaille
-	{"col": Color(0.35, 0.95, 0.75), "tex": "light_01"}, # Charge
-	{"col": Color(1.0, 0.72, 0.25), "tex": "magic_03"},  # Fracas
-	{"col": Color(0.45, 0.7, 1.0), "tex": "circle_05"},  # Garde (casque)
-	{"col": Color(1.0, 0.25, 0.3), "tex": "flame_02"},   # Fureur (plastron)
-	{"col": Color(0.65, 1.0, 0.55), "tex": "twirl_02"},  # Pas de vent (bottes)
-]
+const SKILL_STYLE := {
+	"entaille": {"col": Color(1.0, 0.42, 0.2), "tex": "slash_02"},
+	"charge": {"col": Color(0.35, 0.95, 0.75), "tex": "light_01"},
+	"fracas": {"col": Color(1.0, 0.72, 0.25), "tex": "magic_03"},
+	"garde": {"col": Color(0.45, 0.7, 1.0), "tex": "circle_05"},
+	"souffle": {"col": Color(0.45, 1.0, 0.6), "tex": "magic_03"},
+	"fureur": {"col": Color(1.0, 0.25, 0.3), "tex": "flame_02"},
+	"embrase": {"col": Color(1.0, 0.5, 0.1), "tex": "flame_04"},
+	"vent": {"col": Color(0.65, 1.0, 0.55), "tex": "twirl_02"},
+	"roulade": {"col": Color(0.9, 0.78, 0.55), "tex": "smoke_04"},
+}
+var panel := ""            # poste ouvert ("" = aucun)
+var _panel_title := ""
+var _craft_t := 0.0        # fabrication en cours
+var _craft_r: Dictionary = {}
+var _panel_btns := []      # [Rect2, action]
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -46,8 +54,8 @@ func _ready() -> void:
 		_flash[slot + 1] = 1.0)
 
 func _on_item(id: String, n: int) -> void:
-	var it: Dictionary = G.ITEMS[id]
-	_toasts.push_front(["+%d  %s" % [n, it.name], it.color, 2.6])
+	var col: Color = G.ITEMS[id].color if G.ITEMS.has(id) else Color(1, 0.85, 0.4)
+	_toasts.push_front(["+%d  %s" % [n, G.item_name(id)], col, 2.6])
 	if _toasts.size() > 4: _toasts.pop_back()
 
 # --- Disposition ---------------------------------------------------------------
@@ -69,6 +77,9 @@ func _btn_layout() -> Dictionary:
 
 # --- Entrées -----------------------------------------------------------------------
 func _input(ev: InputEvent) -> void:
+	if ev is InputEventScreenTouch and panel != "" and ev.pressed and _panel_rect().has_point(ev.position):
+		_panel_click(ev.position)
+		return
 	if ev is InputEventScreenTouch:
 		var t := ev as InputEventScreenTouch
 		if t.pressed:
@@ -112,7 +123,7 @@ func _btn_at(p: Vector2) -> String:
 	var best := ""
 	var bd := INF
 	for k in lay:
-		if k == "gather" and player.nearest_gather() == null: continue
+		if k == "gather" and player.nearest_gather() == null and nearest_station().is_empty(): continue
 		var d := p.distance_to(lay[k][0])
 		if d < lay[k][1] * 1.15 and d < bd:
 			bd = d
@@ -128,11 +139,102 @@ func _press(b: String, down: bool) -> void:
 		var i := int(b.substr(1))
 		if not player.try_skill(i): _flash[i + 1] = -1.0
 	elif down and b == "gather":
+		var st := nearest_station()
+		if not st.is_empty():
+			open_panel(st)
+			return
 		var n: Node3D = player.nearest_gather()
 		if n: player.start_gather(n)
 
+func nearest_station() -> Dictionary:
+	for st in G.stations:
+		if Vector2(st.pos.x - player.global_position.x, st.pos.z - player.global_position.z).length() < 2.4:
+			return st
+	return {}
+
+func open_panel(st: Dictionary) -> void:
+	panel = st.id
+	_panel_title = st.title
+	_craft_t = 0.0
+	player.attack_held = false
+	Sfx.play("ui", -6.0)
+
+func _panel_rect() -> Rect2:
+	var w := 660.0
+	var h := 500.0
+	return Rect2((size.x - w) * 0.5, (size.y - h) * 0.5 - 10, w, h)
+
+## Lignes du panneau : [titre, détail, couleur, libellé du bouton, actif, action]
+func _panel_rows() -> Array:
+	var rows := []
+	match panel:
+		"tisserand":
+			for r in G.RECIPES.tisserand:
+				rows.append([G.item_name(r.out), _cost_text(r), G.ITEMS[r.out].color, "Tisser", G.can_craft(r), ["craft", r]])
+		"forge":
+			var crafted := {}
+			for r in G.RECIPES.forge: crafted[r.out] = r
+			for id in G.GEAR:
+				var gd: Dictionary = G.GEAR[id]
+				var spell: String = player.SPELLS[gd.spell].name
+				var detail := "%s — sort : %s" % [gd.slot.capitalize(), spell]
+				var col: Color = SKILL_STYLE[gd.spell].col
+				if G.owned_gear.has(id):
+					var on: bool = G.equipped[gd.slot] == id
+					rows.append([gd.name, detail, col, "Équipé" if on else "Équiper", not on, ["equip", id]])
+				elif crafted.has(id):
+					var r: Dictionary = crafted[id]
+					rows.append([gd.name, detail + "\n" + _cost_text(r), col, "Forger", G.can_craft(r), ["craft", r]])
+		"marche":
+			for id in G.inventory:
+				if not G.ITEMS.has(id): continue
+				var n: int = G.inventory[id]
+				var price: int = G.ITEMS[id].price
+				rows.append(["%s  x%d" % [G.ITEMS[id].name, n], "%d argent pièce" % price, G.ITEMS[id].color, "Vendre +%d" % (n * price), true, ["sell", id]])
+			if rows.is_empty():
+				rows.append(["Rien à vendre", "Récolte du lin ou bats des monstres.", Color(0.6, 0.6, 0.6), "", false, []])
+	return rows
+
+func _cost_text(r: Dictionary) -> String:
+	var parts := []
+	for k in r.cost:
+		parts.append("%d/%d %s" % [G.inventory.get(k, 0), r.cost[k], G.item_name(k)])
+	if r.silver > 0: parts.append("%d argent" % r.silver)
+	return ", ".join(parts)
+
+func _panel_click(p: Vector2) -> void:
+	for b in _panel_btns:
+		if b[0].has_point(p):
+			do_action(b[1])
+			return
+
+func do_action(a: Array) -> void:
+	if a.is_empty(): return
+	match a[0]:
+		"close":
+			panel = ""
+			Sfx.play("ui", -8.0)
+		"craft":
+			if _craft_t <= 0.0 and G.can_craft(a[1]):
+				_craft_r = a[1]
+				_craft_t = a[1].time
+				Sfx.play("gather", -4.0)
+		"equip":
+			G.equip(a[1])
+			Sfx.play("pickup", -4.0)
+		"sell":
+			if G.sell_all(a[1]) > 0: Sfx.play("loot", -4.0)
+
 func _process(delta: float) -> void:
 	size = get_viewport_rect().size
+	if panel != "":
+		if nearest_station().is_empty(): panel = ""
+		if _craft_t > 0.0:
+			_craft_t -= delta
+			if _craft_t <= 0.0:
+				if G.craft(_craft_r):
+					Sfx.play("loot", -2.0)
+					G.burst(player.global_position + Vector3.UP * 1.5, "star_06", Color(1, 0.9, 0.5), 14, 3.0, 0.4, 0.6, -2.0)
 	_fps = lerpf(_fps, 1.0 / maxf(delta / maxf(Engine.time_scale, 0.01), 0.001), 0.05)
 	for i in _flash.size(): _flash[i] = move_toward(_flash[i], 0.0, delta * 3.0)
 	for t in _toasts: t[2] -= delta
@@ -196,6 +298,7 @@ func _draw() -> void:
 	_draw_loot()
 	_draw_hub()
 	_draw_joystick()
+	_draw_panel()
 	if show_debug:
 		_txt(Vector2(size.x - 70, size.y - 10), "%d i/s" % roundi(_fps), 12, Color(1, 1, 1, 0.45))
 
@@ -227,7 +330,7 @@ func _draw_player_frame() -> void:
 	for i in [3, 4, 5]:
 		var left: float = player.buff_left(i)
 		if left <= 0.0: continue
-		var st: Dictionary = SKILL_STYLE[i]
+		var st: Dictionary = SKILL_STYLE[player.skills[i]["id"]]
 		var bc := Vector2(x, 100)
 		_orb(bc, 13, st.col, st.tex)
 		draw_arc(bc, 14, 0, TAU, 24, Color(0.8, 0.7, 0.5), 2.0, true)
@@ -246,8 +349,9 @@ func _draw_target_frame() -> void:
 ## Mini-carte en losange, orientée comme la caméra (le nord en haut à droite).
 func _map_pt(c: Vector2, w: float, h: float, p: Vector3) -> Vector2:
 	var half: float = G.world.HALF
+	var zmax: float = G.world.Z_MAX
 	var u := p.x / half * 0.5
-	var v := p.z / half * 0.5
+	var v := (p.z - (zmax - half) * 0.5) / ((zmax + half) * 0.5) * 0.5
 	return c + Vector2((u - v) * w * 0.5, (u + v) * h * 0.5)
 
 func _draw_minimap() -> void:
@@ -256,7 +360,7 @@ func _draw_minimap() -> void:
 	var c := Vector2(size.x - 128, 122)
 	var t := Time.get_time_dict_from_system()
 	_panel(Rect2(c.x - 118, 10, 236, 34), Color(0.12, 0.1, 0.08, 0.88), 6)
-	_txt(Vector2(c.x - 110, 32), "Clairière de Brumefeuille", 13, Color(0.98, 0.92, 0.78))
+	_txt(Vector2(c.x - 110, 32), "Bourg de Brumefeuille" if player.global_position.z > 40.0 else "Clairière de Brumefeuille", 13, Color(0.98, 0.92, 0.78))
 	_txt(Vector2(c.x + 66, 32), "%02d:%02d" % [t.hour, t.minute], 13, Color(0.85, 0.85, 0.9), 44, HORIZONTAL_ALIGNMENT_RIGHT)
 	var dia := PackedVector2Array([c + Vector2(0, -h * 0.5), c + Vector2(w * 0.5, 0), c + Vector2(0, h * 0.5), c + Vector2(-w * 0.5, 0)])
 	var border := PackedVector2Array([dia[0] + Vector2(0, -5), dia[1] + Vector2(8, 0), dia[2] + Vector2(0, 5), dia[3] + Vector2(-8, 0)])
@@ -267,6 +371,10 @@ func _draw_minimap() -> void:
 	for d in G.world.DECOR:
 		if "Pine" in d[0] or "Tree" in d[0]:
 			draw_circle(_map_pt(c, w, h, Vector3(d[1], 0, d[2])), 2.6, Color(0.15, 0.28, 0.12))
+	for hs in G.world.Town.HOUSES:
+		draw_circle(_map_pt(c, w, h, hs.pos), 4.5, Color(0.7, 0.35, 0.22))
+	for st in G.stations:
+		draw_circle(_map_pt(c, w, h, st.pos), 3.5, Color(1, 0.85, 0.35))
 	for n in G.gather_nodes:
 		if n.charges > 0: draw_circle(_map_pt(c, w, h, n.global_position), 3.0, Color(0.85, 0.95, 0.55))
 	for e in G.enemies:
@@ -286,6 +394,7 @@ func _draw_loot() -> void:
 	_txt(r.position + Vector2(32, 21), "%d" % roundi(_silver_shown), 15, Color(0.92, 0.94, 1.0))
 	y += 36
 	for id in G.inventory:
+		if not G.ITEMS.has(id): continue
 		var it: Dictionary = G.ITEMS[id]
 		var rr := Rect2(size.x - 216, y, 176, 26)
 		_panel(rr, Color(0.07, 0.06, 0.05, 0.62))
@@ -328,13 +437,13 @@ func _draw_hub() -> void:
 	for i in 6:
 		var c: Vector2 = lay["s%d" % i][0]
 		var r: float = lay["s%d" % i][1]
-		var st: Dictionary = SKILL_STYLE[i]
+		var st: Dictionary = SKILL_STYLE[player.skills[i]["id"]]
 		var cdl: float = player.cd_left[i]
 		var no_energy: bool = player.energy < player.skills[i]["cost"]
 		var ready := cdl <= 0.0 and not no_energy
 		_bezel(c, r, maxf(_flash[i + 1], 0.0), i >= 3)
 		_orb(c, r, st.col, st.tex, not ready)
-		_skill_glyph(i, c, r * 0.5, Color(1, 1, 1, 0.95) if ready else Color(0.6, 0.6, 0.65, 0.8))
+		_skill_glyph(player.skills[i]["id"], c, r * 0.5, Color(1, 1, 1, 0.95) if ready else Color(0.6, 0.6, 0.65, 0.8))
 		if cdl > 0.0:
 			var frac: float = cdl / _cd_total[i]
 			draw_arc(c, r * 0.5, -PI * 0.5, -PI * 0.5 + TAU * frac, 32, Color(0, 0, 0, 0.6), r, true)
@@ -356,7 +465,15 @@ func _draw_hub() -> void:
 		draw_circle(ac + Vector2(0, -ar * 0.1 * (1.0 - f)), ar * f, Color(0.16, 0.2, 0.3).lerp(Color(0.45, 0.55, 0.72) if not down else Color(0.6, 0.7, 0.9), 1.0 - f))
 	draw_arc(ac, ar * 0.84, PI * 1.15, PI * 1.85, 20, Color(1, 1, 1, 0.25), ar * 0.1, true)
 	_icon_sword(ac, ar * 0.58, Color(1, 0.96, 0.86))
-	if player.nearest_gather() != null and player.gather_progress() < 0.0:
+	var stn := nearest_station()
+	if not stn.is_empty() and panel == "":
+		var gc: Vector2 = lay["gather"][0]
+		var gr: float = lay["gather"][1] * (1.0 + sin(t * 5.0) * 0.04)
+		_bezel(gc, gr, 0.3 + 0.3 * sin(t * 5.0), true)
+		_orb(gc, gr, Color(0.95, 0.75, 0.35), "star_06")
+		_icon_hammer(gc, gr * 0.5, Color(1, 0.97, 0.88))
+		_txt(gc + Vector2(-60, gr + 24), stn.label, 14, Color(1, 0.92, 0.7), 120, HORIZONTAL_ALIGNMENT_CENTER)
+	elif player.nearest_gather() != null and player.gather_progress() < 0.0:
 		var gc: Vector2 = lay["gather"][0]
 		var gr: float = lay["gather"][1] * (1.0 + sin(t * 5.0) * 0.04)
 		_bezel(gc, gr, 0.3 + 0.3 * sin(t * 5.0), true)
@@ -413,7 +530,8 @@ func _icon_leaf(c: Vector2, s: float, col: Color) -> void:
 	draw_colored_polygon(pts, col)
 	draw_line(c + Vector2(0, -0.9) * s, c + Vector2(0, 1.1) * s, col.darkened(0.5), 2.0)
 
-func _skill_glyph(i: int, c: Vector2, s: float, col: Color) -> void:
+func _skill_glyph(id: String, c: Vector2, s: float, col: Color) -> void:
+	var i: int = ["entaille", "charge", "fracas", "garde", "fureur", "vent", "souffle", "embrase", "roulade"].find(id)
 	var sh := Color(0, 0, 0, 0.5)
 	for o in [Vector2(2, 2), Vector2.ZERO]:
 		var cc: Color = sh if o != Vector2.ZERO else col
@@ -445,8 +563,63 @@ func _skill_glyph(i: int, c: Vector2, s: float, col: Color) -> void:
 				for k in 3:
 					var y := (k - 1) * 0.42 * s
 					draw_line(q + Vector2((-0.8 + k * 0.15) * s, y), q + Vector2(0.75 * s, y), cc, s * 0.16, true)
+			6: # Souffle clair : croix de soin
+				draw_rect(Rect2(q + Vector2(-0.22, -0.8) * s, Vector2(0.44, 1.6) * s), cc)
+				draw_rect(Rect2(q + Vector2(-0.8, -0.22) * s, Vector2(1.6, 0.44) * s), cc)
+			7: # Embrasement : anneau de flammes
+				draw_arc(q, s * 0.6, 0, TAU, 24, cc, s * 0.16, true)
+				for k in 6:
+					var a := TAU * k / 6.0
+					var d := Vector2(cos(a), sin(a))
+					draw_colored_polygon(PackedVector2Array([q + d * s * 0.62 + d.orthogonal() * s * 0.16, q + d * s * 1.0, q + d * s * 0.62 - d.orthogonal() * s * 0.16]), cc)
+			8: # Roulade : flèche courbe
+				draw_arc(q + Vector2(0, 0.1) * s, s * 0.62, PI * 0.9, PI * 2.1, 18, cc, s * 0.2, true)
+				var tip := q + Vector2(0.62, 0.1) * s + Vector2(0, 0.0)
+				draw_colored_polygon(PackedVector2Array([tip + Vector2(-0.3, -0.05) * s, tip + Vector2(0.3, -0.05) * s, tip + Vector2(0, 0.42) * s]), cc)
 	if i == 3:
 		draw_line(c + Vector2(0, -0.6) * s, c + Vector2(0, 0.62) * s, Color(0.3, 0.45, 0.7), s * 0.14)
 		draw_line(c + Vector2(-0.45, -0.15) * s, c + Vector2(0.45, -0.15) * s, Color(0.3, 0.45, 0.7), s * 0.14)
 	elif i == 4:
 		draw_circle(c + Vector2(0, 0.3) * s, s * 0.22, Color(1, 0.85, 0.5))
+
+func _icon_hammer(c: Vector2, s: float, col: Color) -> void:
+	draw_line(c + Vector2(-0.6, 0.7) * s, c + Vector2(0.25, -0.2) * s, Color(0.55, 0.38, 0.22), s * 0.2)
+	draw_colored_polygon(PackedVector2Array([c + Vector2(-0.05, -0.75) * s, c + Vector2(0.8, 0.1) * s, c + Vector2(0.5, 0.4) * s, c + Vector2(-0.35, -0.45) * s]), col)
+
+func _draw_panel() -> void:
+	_panel_btns.clear()
+	if panel == "": return
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
+	var r := _panel_rect()
+	_panel(r, Color(0.1, 0.085, 0.07, 0.96), 10)
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 52)), Color(0.22, 0.16, 0.1, 0.95))
+	_txt(r.position + Vector2(22, 35), _panel_title, 22, Color(1, 0.9, 0.7))
+	# argent
+	_txt(r.position + Vector2(r.size.x - 200, 34), "Argent : %d" % G.silver, 16, Color(0.9, 0.92, 1), 120, HORIZONTAL_ALIGNMENT_RIGHT)
+	# fermer
+	var xb := Rect2(r.position + Vector2(r.size.x - 52, 8), Vector2(40, 36))
+	draw_rect(xb, Color(0.45, 0.15, 0.12))
+	_txt(xb.position + Vector2(0, 27), "X", 20, Color(1, 1, 1), 40, HORIZONTAL_ALIGNMENT_CENTER)
+	_panel_btns.append([xb, ["close"]])
+	var y := r.position.y + 62
+	for row in _panel_rows():
+		var rr := Rect2(r.position.x + 16, y, r.size.x - 32, 66)
+		draw_rect(rr, Color(1, 1, 1, 0.05))
+		draw_circle(rr.position + Vector2(30, 33), 18, row[2].darkened(0.5))
+		draw_circle(rr.position + Vector2(30, 31), 14, row[2])
+		_txt(rr.position + Vector2(60, 22), row[0], 16, Color(1, 0.96, 0.88), 380)
+		var lines: PackedStringArray = row[1].split("\n")
+		for li in lines.size():
+			_txt(rr.position + Vector2(60, 40 + li * 16), lines[li], 12, Color(0.82, 0.82, 0.84), 420)
+		if row[3] != "":
+			var bb := Rect2(rr.position + Vector2(rr.size.x - 150, 13), Vector2(138, 40))
+			var en: bool = row[4]
+			var busy: bool = _craft_t > 0.0 and row[5].size() > 1 and row[5][0] == "craft" and row[5][1] == _craft_r
+			draw_rect(bb, Color(0.25, 0.45, 0.2) if en else Color(0.22, 0.22, 0.24))
+			draw_rect(bb, Color(0.85, 0.72, 0.45, 0.6 if en else 0.2), false, 2.0)
+			if busy:
+				var f: float = 1.0 - _craft_t / _craft_r.time
+				draw_rect(Rect2(bb.position, Vector2(bb.size.x * f, bb.size.y)), Color(0.55, 0.8, 0.35, 0.8))
+			_txt(bb.position + Vector2(0, 25), row[3], 15, Color(1, 1, 1) if en else Color(0.6, 0.6, 0.62), bb.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+			if en: _panel_btns.append([bb, row[5]])
+		y += 72

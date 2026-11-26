@@ -11,15 +11,83 @@ var cam_rig: Node3D
 var hud: CanvasLayer
 var enemies: Array = []
 var gather_nodes: Array = []
+var stations: Array = []
 
 var silver := 0
 var inventory := {}  # id -> quantité
 
 const ITEMS := {
-	"lin": {"name": "Fibre de lin", "color": Color(0.85, 0.82, 0.6)},
-	"cendre": {"name": "Cœur de cendre", "color": Color(1.0, 0.45, 0.15)},
-	"griffe": {"name": "Griffe de rôdeur", "color": Color(0.7, 0.75, 0.95)},
+	"lin": {"name": "Fibre de lin", "color": Color(0.85, 0.82, 0.6), "price": 2},
+	"tissu": {"name": "Tissu de lin", "color": Color(0.95, 0.93, 0.8), "price": 9},
+	"cendre": {"name": "Cœur de cendre", "color": Color(1.0, 0.45, 0.15), "price": 16},
+	"griffe": {"name": "Griffe de rôdeur", "color": Color(0.7, 0.75, 0.95), "price": 11},
 }
+
+## Équipement : chaque pièce donne le sort de son emplacement (« tu es ce que tu portes »).
+## skill = index du sort dans player.SPELLS
+const GEAR := {
+	"casque_garde": {"name": "Heaume du gardien", "slot": "casque", "spell": "garde"},
+	"capuche_lin": {"name": "Capuche de lin", "slot": "casque", "spell": "souffle"},
+	"plastron_fureur": {"name": "Plastron du soldat", "slot": "plastron", "spell": "fureur"},
+	"plastron_cendre": {"name": "Plastron de cendre", "slot": "plastron", "spell": "embrase"},
+	"bottes_vent": {"name": "Bottes de voyage", "slot": "bottes", "spell": "vent"},
+	"bottes_rodeur": {"name": "Bottes du rôdeur", "slot": "bottes", "spell": "roulade"},
+}
+
+## Recettes par poste de travail : produit, quantité, coût {objet: n}, argent, durée
+const RECIPES := {
+	"tisserand": [
+		{"out": "tissu", "n": 1, "cost": {"lin": 3}, "silver": 0, "time": 1.2},
+	],
+	"forge": [
+		{"out": "capuche_lin", "n": 1, "cost": {"tissu": 3}, "silver": 15, "time": 1.6},
+		{"out": "plastron_cendre", "n": 1, "cost": {"tissu": 2, "cendre": 2}, "silver": 30, "time": 1.8},
+		{"out": "bottes_rodeur", "n": 1, "cost": {"tissu": 2, "griffe": 2}, "silver": 20, "time": 1.6},
+	],
+}
+
+var owned_gear := {"casque_garde": true, "plastron_fureur": true, "bottes_vent": true}
+var equipped := {"casque": "casque_garde", "plastron": "plastron_fureur", "bottes": "bottes_vent"}
+signal gear_changed
+
+func item_name(id: String) -> String:
+	if ITEMS.has(id): return ITEMS[id].name
+	if GEAR.has(id): return GEAR[id].name
+	return id
+
+func can_craft(r: Dictionary) -> bool:
+	if silver < r.silver: return false
+	for k in r.cost:
+		if inventory.get(k, 0) < r.cost[k]: return false
+	if GEAR.has(r.out) and owned_gear.has(r.out): return false
+	return true
+
+func craft(r: Dictionary) -> bool:
+	if not can_craft(r): return false
+	silver -= r.silver
+	silver_changed.emit(silver)
+	for k in r.cost:
+		inventory[k] -= r.cost[k]
+		if inventory[k] <= 0: inventory.erase(k)
+	if GEAR.has(r.out):
+		owned_gear[r.out] = true
+		equip(r.out)
+		item_gained.emit(r.out, 1)
+	else:
+		give_item(r.out, r.n)
+	return true
+
+func equip(id: String) -> void:
+	equipped[GEAR[id].slot] = id
+	gear_changed.emit()
+
+func sell_all(id: String) -> int:
+	var n: int = inventory.get(id, 0)
+	if n <= 0: return 0
+	var v: int = n * ITEMS[id].price
+	inventory.erase(id)
+	give_silver(v)
+	return v
 
 var _stop_until := 0
 var _trauma := 0.0
@@ -136,7 +204,7 @@ func number(pos: Vector3, value: int, color: Color, big := false) -> void:
 	l.outline_modulate = Color(0, 0, 0, 0.85)
 	l.font = load("res://assets/fonts/DejaVuSansCondensed-Bold.ttf")
 	world.add_child(l)
-	l.global_position = pos + Vector3(randf_range(-0.8, 0.8), randf_range(0.0, 0.5), randf_range(-0.3, 0.3))
+	l.global_position = pos + Vector3(randf_range(-0.35, 0.35), 0.0, 0.0)
 	var tw := l.create_tween()
 	tw.set_parallel()
 	tw.tween_property(l, "global_position:y", pos.y + 1.1, 0.7).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUART)
