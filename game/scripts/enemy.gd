@@ -16,6 +16,20 @@ const KINDS := {
 		"range": 4.2, "windup": 0.6, "attack_anim_at": 0.35, "recover": 0.7,
 		"silver": [6, 11], "drop": "griffe", "flee_at": 0.3, "color": Color(0.7, 0.75, 0.95),
 	},
+	"boss": {
+		"scene": "res://assets/monsters/brute.glb", "name": "Gardien de cendre", "scale": 2.3,
+		"hp": 2200.0, "dmg": 62.0, "speed": 3.1, "radius": 1.5, "aggro": 10.0,
+		"range": 4.4, "windup": 1.15, "attack_anim_at": 0.45, "recover": 0.85,
+		"silver": [110, 150], "drop": "coeur_ardent", "flee_at": 0.0, "color": Color(1.0, 0.35, 0.08),
+		"tint": Color(1.25, 0.62, 0.45), "leash": 15.0, "respawn": 120.0,
+	},
+	"rejeton": {
+		"scene": "res://assets/monsters/rodeur.glb", "name": "Rejeton de braise", "scale": 0.85,
+		"hp": 110.0, "dmg": 16.0, "speed": 5.6, "radius": 0.45, "aggro": 14.0,
+		"range": 3.6, "windup": 0.55, "attack_anim_at": 0.3, "recover": 0.6,
+		"silver": [2, 4], "drop": "", "flee_at": 0.0, "color": Color(1.0, 0.5, 0.2),
+		"tint": Color(1.4, 0.55, 0.3), "leash": 22.0, "respawn": -1.0,
+	},
 }
 const LEASH := 16.0
 const RESPAWN := 25.0
@@ -48,7 +62,17 @@ var _timer := 0.0
 var _look_t := 0.0
 var _col: CollisionShape3D
 var _atk_cd := 0.0
+var phase := 1               # boss : 1, 2 (renforts, pluie de cendres), 3 (enragé)
+var _pattern := "slam"
+var _special_cd := 6.0
+var _adds: Array = []
+var _rain: Array = []        # zones de la pluie de cendres
+var _boss_aura: CPUParticles3D
 var _vy := 0.0
+var _detour_t := 0.0
+var _detour_side := Vector3.ZERO
+var _stuck_t := 0.0
+var _last_pos := Vector3.ZERO
 var _num_stack := 0
 var _num_t := 0
 
@@ -82,6 +106,22 @@ func _ready() -> void:
 	model.scale = Vector3.ONE * data.scale
 	add_child(model)
 	ap = model.find_child("AnimationPlayer")
+	if data.has("tint"):
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			for si in mi.mesh.get_surface_count():
+				var m: Material = mi.mesh.surface_get_material(si)
+				if m is StandardMaterial3D:
+					var t: StandardMaterial3D = m.duplicate()
+					t.albedo_color = data.tint
+					if kind == "boss":
+						t.emission_enabled = true
+						t.emission = Color(1.0, 0.3, 0.05)
+						t.emission_energy_multiplier = 0.35
+					mi.set_surface_override_material(si, t)
+	if kind == "boss":
+		_boss_aura = G.aura(self, "flame_02", Color(1.0, 0.35, 0.08, 0.6), 1.4)
+		_boss_aura.emission_ring_radius = 1.6
+		_boss_aura.amount = 24
 	for a in ["Idle", "Run", "Walk"]:
 		ap.get_animation(a).loop_mode = Animation.LOOP_LINEAR
 	ap.playback_default_blend_time = 0.18
@@ -190,7 +230,7 @@ func _chase_update(delta: float) -> void:
 	if not _target_ok():
 		_send(&"leash")
 		return
-	if global_position.distance_to(home) > LEASH:
+	if global_position.distance_to(home) > data.get("leash", LEASH):
 		_send(&"leash")
 		return
 	if data.flee_at > 0.0 and not _fled and hp < max_hp * data.flee_at:
@@ -199,6 +239,11 @@ func _chase_update(delta: float) -> void:
 	var to := target.global_position - global_position
 	to.y = 0
 	_atk_cd -= delta
+	_special_cd -= delta
+	# le boss lance la pluie de cendres même à distance
+	if kind == "boss" and phase >= 2 and _special_cd <= 0.0 and _atk_cd <= 0.0:
+		_send(&"in_range")
+		return
 	if to.length() <= data.range:
 		if _atk_cd <= 0.0:
 			_send(&"in_range")
@@ -210,18 +255,35 @@ func _chase_update(delta: float) -> void:
 		_play("Walk", 0.2)
 		return
 	_play("Run", 0.15, 1.0 if kind == "brute" else 1.2)
-	_move(to.normalized() * data.speed, delta)
-	_turn_to(target.global_position, delta, 10.0)
+	var dir := to.normalized()
+	# contournement : bloqué par un rocher ou un arbre -> on longe l'obstacle un instant
+	if _detour_t > 0.0:
+		_detour_t -= delta
+		dir = (dir * 0.35 + _detour_side).normalized()
+	elif global_position.distance_to(_last_pos) < data.speed * delta * 0.25:
+		_stuck_t += delta
+		if _stuck_t > 0.35:
+			_stuck_t = 0.0
+			_detour_t = 0.8
+			_detour_side = Vector3(-dir.z, 0, dir.x) * (1.0 if randf() < 0.5 else -1.0)
+	else:
+		_stuck_t = 0.0
+	_last_pos = global_position
+	_move(dir * data.speed, delta)
+	_turn_to(global_position + dir, delta, 10.0)
 
 # Attaque annoncée : zone rouge au sol, puis frappe, puis récupération
 func _attack_enter() -> void:
 	_atk_phase = 0
-	_atk_t = data.windup
+	_atk_t = _windup()
 	var to := target.global_position - global_position
 	to.y = 0
 	_atk_dir = to.normalized() if to.length() > 0.01 else -global_transform.basis.z
 	rotation.y = atan2(_atk_dir.x, _atk_dir.z) + PI
 	var col := Color(1.0, 0.18, 0.1, 0.9)
+	if kind == "boss":
+		_boss_attack_enter(col)
+		return
 	if kind == "brute":
 		_tele = G.telegraph(global_position + _atk_dir * 1.8, 0.0, 0, Vector2(6.4, 6.4), col)
 	else:
@@ -237,7 +299,9 @@ func _attack_update(delta: float) -> void:
 		0:
 			_settle(delta)
 			if is_instance_valid(_tele):
-				_tele.material_override.set_shader_parameter("progress", 1.0 - _atk_t / data.windup)
+				_tele.material_override.set_shader_parameter("progress", 1.0 - _atk_t / _windup())
+			for r in _rain:
+				if is_instance_valid(r): r.material_override.set_shader_parameter("progress", 1.0 - _atk_t / _windup())
 			if _atk_t <= data.attack_anim_at and not ap.is_playing():
 				ap.play()
 			if _atk_t <= 0.0:
@@ -250,6 +314,9 @@ func _attack_update(delta: float) -> void:
 
 func _strike() -> void:
 	if is_instance_valid(_tele): _tele.queue_free()
+	if kind == "boss":
+		_boss_strike()
+		return
 	var p: Node3D = G.player
 	var hit := false
 	if kind == "brute":
@@ -276,12 +343,22 @@ func _strike() -> void:
 
 func _attack_exit() -> void:
 	_atk_cd = (1.3 if kind == "brute" else 1.0) + randf() * 0.9
+	if kind == "boss": _atk_cd = (1.2 if phase < 3 else 0.6) + randf() * 0.5
+	for r in _rain:
+		if is_instance_valid(r): r.queue_free()
+	_rain.clear()
 	if is_instance_valid(_tele): _tele.queue_free()
 	if not ap.is_playing(): ap.play()
 
 # Retour au camp : se régénère, ignore les coups un instant
 func _return_enter() -> void:
 	target = null
+	if kind == "boss":
+		phase = 1
+		if _boss_aura: _boss_aura.emitting = false
+		for a in _adds:
+			if is_instance_valid(a) and not a.dead: a.take_hit(9999.0, global_position)
+		_adds.clear()
 	_play("Walk", 0.2, 1.3)
 
 func _return_update(delta: float) -> void:
@@ -328,9 +405,14 @@ func _stun_update(delta: float) -> void:
 
 func _dead_enter() -> void:
 	dead = true
+	if kind == "boss":
+		for a in _adds:
+			if is_instance_valid(a) and not a.dead: a.take_hit(9999.0, global_position)
+		_boss_aura.emitting = false
+		G.boss_defeated.emit(self)
 	_col.disabled = true
 	_play("Die", 0.08)
-	_timer = RESPAWN
+	_timer = data.get("respawn", RESPAWN) if data.get("respawn", RESPAWN) > 0.0 else 3.0
 	target = null
 
 func _dead_update(delta: float) -> void:
@@ -339,9 +421,17 @@ func _dead_update(delta: float) -> void:
 	if _timer < 2.0 and model.visible:
 		model.scale = model.scale.lerp(Vector3.ONE * 0.01, delta * 4.0)
 		if model.scale.x < 0.05: model.visible = false
-	if _timer <= 0.0: _respawn()
+	if _timer <= 0.0:
+		if data.get("respawn", RESPAWN) < 0.0:
+			G.enemies.erase(self)
+			queue_free()
+			return
+		_respawn()
 
 func _respawn() -> void:
+	phase = 1
+	_special_cd = 6.0
+	if _boss_aura: _boss_aura.emitting = false
 	global_position = home
 	rotation.y = home_yaw
 	hp = max_hp
@@ -365,7 +455,7 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 	_num_stack = _num_stack + 1 if now - _num_t < 450 else 0
 	_num_t = now
 	var top: Vector3 = global_position + Vector3.UP * (2.1 * data.scale + 0.42 * (_num_stack % 4))
-	G.number(top, int(dmg), Color(1, 0.92, 0.55) if not heavy else Color(1, 0.7, 0.25), heavy)
+	if dmg < 9000.0: G.number(top, int(dmg), Color(1, 0.92, 0.55) if not heavy else Color(1, 0.7, 0.25), heavy)
 	var d := global_position - from
 	d.y = 0
 	_push = d.normalized() * knock * (2.6 if kind == "rodeur" else 1.4)
@@ -375,6 +465,7 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 	G.burst(global_position + Vector3.UP * (1.1 * data.scale), "spark_04", data.color, 10 if heavy else 6, 4.5, 0.4, 0.3)
 	Sfx.play_at("hit_heavy" if heavy else "hit", global_position, -2.0 if heavy else -5.0)
 	if target == null and G.player: target = G.player
+	if kind == "boss" and hp > 0.0: _check_phase()
 	if hp <= 0.0:
 		hp = 0.0
 		_drop_loot()
@@ -382,7 +473,7 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 		return
 	if st == "Garde" or st == "Retour":
 		_send(&"aggro")
-	elif stun > 0.0 and st != "Mort":
+	elif stun > 0.0 and st != "Mort" and kind != "boss":
 		_stun_t = stun
 		_send(&"stun")
 
@@ -391,7 +482,7 @@ func _drop_loot() -> void:
 	var pos := global_position + Vector3.UP
 	G.burst(pos, "star_06", Color(1, 0.85, 0.3, 1), 14, 4.0, 0.4, 0.6, -4.0)
 	var drop := ""
-	if randf() < 0.65: drop = data.drop
+	if data.drop != "" and (randf() < 0.65 or kind == "boss"): drop = data.drop
 	# le butin vole vers le joueur (ramassage automatique)
 	get_tree().create_timer(0.5, false).timeout.connect(func():
 		Sfx.play("loot", -6.0)
@@ -424,3 +515,106 @@ func _turn_to(p: Vector3, delta: float, rate: float) -> void:
 	d.y = 0
 	if d.length() < 0.01: return
 	rotation.y = lerp_angle(rotation.y, atan2(d.x, d.z) + PI, minf(rate * delta, 1.0))
+
+# --- Boss : Gardien de cendre --------------------------------------------------
+func _windup() -> float:
+	return data.windup * (0.7 if phase == 3 else 1.0)
+
+func _check_phase() -> void:
+	var f := hp / max_hp
+	if phase == 1 and f < 0.6:
+		phase = 2
+		_special_cd = 0.5
+		_phase_fx("Le Gardien appelle ses rejetons !")
+		for k in 3:
+			var a := TAU * k / 3.0 + 0.4
+			var pos := global_position + Vector3(cos(a), 0, sin(a)) * 3.5
+			pos.y = G.world.h(pos.x, pos.z)
+			var e = load("res://scripts/enemy.gd").new()
+			e.setup("rejeton", pos, a)
+			G.world.add_child(e)
+			G.enemies.append(e)
+			e.camp = [e]
+			e.call_deferred("call_for_help", G.player)
+			_adds.append(e)
+			G.burst(pos + Vector3.UP * 0.5, "flame_04", Color(1, 0.4, 0.1, 0.9), 14, 3.0, 0.7, 0.6, 1.0)
+	elif phase == 2 and f < 0.25:
+		phase = 3
+		_phase_fx("Le Gardien entre en fureur !")
+		_boss_aura.emitting = true
+
+func _phase_fx(msg: String) -> void:
+	G.announce.emit(msg)
+	_play("Roar", 0.1, 1.0)
+	G.shake(0.5)
+	G.ring(global_position, "circle_05", Color(1.0, 0.35, 0.1, 0.9), 1.0, 14.0, 0.6)
+	Sfx.play_at("slam", global_position, 4.0, 0.5)
+
+func _boss_attack_enter(col: Color) -> void:
+	var to := target.global_position - global_position
+	to.y = 0
+	if phase >= 2 and _special_cd <= 0.0:
+		_pattern = "pluie"
+		_special_cd = 9.0 if phase == 2 else 6.0
+	elif to.length() > data.range:
+		_pattern = "souffle"
+	else:
+		_pattern = "souffle" if randf() < 0.35 else "slam"
+	match _pattern:
+		"slam":
+			_tele = G.telegraph(global_position + _atk_dir * 2.4, 0.0, 0, Vector2(8.0, 8.0), col)
+		"souffle":
+			_tele = G.telegraph(global_position, rotation.y, 1, Vector2(16.0, 16.0), col, 70.0)
+		"pluie":
+			_tele = null
+			var tp: Vector3 = target.global_position
+			var spots := [tp]
+			for k in (5 if phase == 2 else 7):
+				var a := randf() * TAU
+				spots.append(tp + Vector3(cos(a), 0, sin(a)) * randf_range(2.5, 6.0))
+			for sp in spots:
+				_rain.append(G.telegraph(sp, 0.0, 0, Vector2(4.4, 4.4), Color(1.0, 0.4, 0.05, 0.9)))
+	_play("Attack" if _pattern != "pluie" else "Roar", 0.1, 1.0)
+	ap.seek(0.0, true)
+	ap.pause()
+
+func _boss_strike() -> void:
+	var p: Node3D = G.player
+	var hit := false
+	var dmg: float = data.dmg
+	match _pattern:
+		"slam":
+			var c := global_position + _atk_dir * 2.4
+			Sfx.play_at("slam", c, 3.0, 0.55)
+			G.burst(c + Vector3.UP * 0.2, "dirt_02", Color(0.5, 0.35, 0.25, 0.95), 28, 7.0, 1.0, 0.6, -9.0)
+			G.burst(c + Vector3.UP * 0.3, "flame_04", Color(1.0, 0.45, 0.1, 1.0), 20, 5.0, 0.7, 0.6, 1.0)
+			G.ring(c, "circle_05", Color(1.0, 0.4, 0.1, 0.9), 1.0, 9.0, 0.4)
+			G.shake(0.5)
+			if p and not p.dead and Vector2(p.global_position.x - c.x, p.global_position.z - c.z).length() < 4.0 + 0.3: hit = true
+		"souffle":
+			Sfx.play_at("hit_heavy", global_position, 2.0, 0.5)
+			for k in 7:
+				var d := _atk_dir.rotated(Vector3.UP, deg_to_rad(-30.0 + k * 10.0))
+				for j in 3:
+					G.burst(global_position + d * (2.5 + j * 2.0) + Vector3.UP * 0.6, "flame_02", Color(1.0, 0.4, 0.08, 0.9), 6, 2.5, 1.0, 0.5, 2.0)
+			G.shake(0.35)
+			if p and not p.dead:
+				var rel := p.global_position - global_position
+				rel.y = 0
+				if rel.length() < 8.0 and rad_to_deg(_atk_dir.angle_to(rel.normalized())) < 35.0: hit = true
+			dmg *= 0.85
+		"pluie":
+			Sfx.play_at("slam", G.player.global_position, 0.0, 0.8)
+			for r in _rain:
+				if not is_instance_valid(r): continue
+				var c: Vector3 = r.global_position
+				G.burst(c + Vector3.UP * 0.4, "flame_04", Color(1.0, 0.45, 0.1, 1.0), 12, 4.0, 0.8, 0.5, 2.0)
+				G.burst(c + Vector3.UP * 3.0, "smoke_04", Color(0.3, 0.25, 0.25, 0.7), 6, 1.0, 1.2, 0.8, -6.0)
+				if p and not p.dead and Vector2(p.global_position.x - c.x, p.global_position.z - c.z).length() < 2.2 + 0.3: hit = true
+				r.queue_free()
+			_rain.clear()
+			G.shake(0.3)
+			dmg *= 0.7
+	if hit:
+		p.take_hit(dmg * randf_range(0.9, 1.1), global_position, 3.0)
+		G.hitstop(70)

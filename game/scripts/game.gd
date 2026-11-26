@@ -4,6 +4,8 @@ extends Node
 signal silver_changed(v: int)
 signal item_gained(id: String, amount: int)
 signal target_changed(t)
+signal announce(msg: String)
+signal boss_defeated(boss)
 
 var world: Node3D
 var player: Node3D
@@ -24,6 +26,7 @@ const ITEMS := {
 	"tissu": {"name": "Tissu de lin", "color": Color(0.95, 0.93, 0.8), "price": 9},
 	"cendre": {"name": "Cœur de cendre", "color": Color(1.0, 0.45, 0.15), "price": 16},
 	"griffe": {"name": "Griffe de rôdeur", "color": Color(0.7, 0.75, 0.95), "price": 11},
+	"coeur_ardent": {"name": "Cœur ardent", "color": Color(1.0, 0.3, 0.05), "price": 90},
 }
 
 ## Équipement : chaque pièce donne le sort de son emplacement (« tu es ce que tu portes »).

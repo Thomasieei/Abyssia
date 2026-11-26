@@ -12,6 +12,7 @@ uniform vec4 segs[24];      // segments de chemin : (ax, az, bx, bz)
 uniform float seg_w[24];    // demi-largeur de chaque segment
 uniform int seg_n = 0;
 uniform vec3 ash_center = vec3(0.0, 0.0, -22.0); // xz + rayon : sol piétiné du camp
+uniform vec3 ash2 = vec3(0.0, 0.0, 0.0);          // sol brûlé du repaire
 uniform vec3 square = vec3(0.0, 60.0, 8.5);       // place pavée du bourg : xz + rayon
 uniform vec4 stone_a : source_color = vec4(0.47, 0.43, 0.38, 1.0);
 uniform vec4 stone_b : source_color = vec4(0.3, 0.28, 0.26, 1.0);
@@ -58,6 +59,8 @@ void fragment() {
 	float cd = length(p - ash_center.xy) - ash_center.z;
 	float camp = 1.0 - smoothstep(-1.5, 1.8, cd + edge * 2.0);
 	col = mix(col, mix(dcol, ash.rgb, 0.35), camp * 0.85);
+	float burn = 1.0 - smoothstep(-1.5, 2.0, length(p - ash2.xy) - ash2.z + edge * 2.5);
+	col = mix(col, ash.rgb * (0.6 + n3 * 0.5) + vec3(0.25, 0.06, 0.0) * smoothstep(0.62, 0.8, n2), burn * 0.92);
 	// pentes : la roche affleure, en strates
 	float slope = 1.0 - wnrm.y;
 	float strata = 0.5 + 0.5 * sin(wpos.y * 5.0 + n2 * 4.0);

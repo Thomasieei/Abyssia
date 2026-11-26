@@ -24,6 +24,7 @@ var _target: Node3D = null
 var _fps := 60.0
 var _sb_cache: StyleBoxFlat
 var show_debug := true
+var _announce := ["", 0.0]
 
 # couleur et texture de fond de chaque sort (reconnaissable en un coup d'œil)
 const SKILL_STYLE := {
@@ -49,6 +50,8 @@ func _ready() -> void:
 	font = load("res://assets/fonts/DejaVuSansCondensed-Bold.ttf")
 	G.item_gained.connect(_on_item)
 	G.target_changed.connect(func(t): _target = t)
+	G.announce.connect(func(m): _announce = [m, 3.0])
+	G.boss_defeated.connect(func(_b): _announce = ["Le Gardien de cendre est tombé !", 4.0])
 	player.cast.connect(func(slot, cd):
 		_cd_total[slot] = cd
 		_flash[slot + 1] = 1.0)
@@ -237,6 +240,7 @@ func _process(delta: float) -> void:
 					G.burst(player.global_position + Vector3.UP * 1.5, "star_06", Color(1, 0.9, 0.5), 14, 3.0, 0.4, 0.6, -2.0)
 	_fps = lerpf(_fps, 1.0 / maxf(G.real_dt, 0.001), 0.05)
 	for i in _flash.size(): _flash[i] = move_toward(_flash[i], 0.0, delta * 3.0)
+	_announce[1] = maxf(_announce[1] - delta, 0.0)
 	for t in _toasts: t[2] -= delta
 	_toasts = _toasts.filter(func(t): return t[2] > 0.0)
 	_silver_shown = lerpf(_silver_shown, float(G.silver), minf(delta * 8.0, 1.0))
@@ -294,6 +298,7 @@ func _draw() -> void:
 	_draw_gather_bar()
 	_draw_player_frame()
 	_draw_target_frame()
+	_draw_boss()
 	_draw_minimap()
 	_draw_loot()
 	_draw_hub()
@@ -339,6 +344,7 @@ func _draw_player_frame() -> void:
 
 func _draw_target_frame() -> void:
 	if _target == null or not is_instance_valid(_target) or _target.dead: return
+	if _target.kind == "boss": return   # la grande barre du boss le remplace
 	var c := Vector2(332, 50)
 	_panel(Rect2(328, 22, 210, 46), Color(0.07, 0.06, 0.05, 0.78), 6)
 	_emblem(c, 26, _target.data.color, true)
@@ -378,7 +384,7 @@ func _draw_minimap() -> void:
 	for n in G.gather_nodes:
 		if n.charges > 0: draw_circle(_map_pt(c, w, h, n.global_position), 3.0, Color(0.85, 0.95, 0.55))
 	for e in G.enemies:
-		if not e.dead: draw_circle(_map_pt(c, w, h, e.global_position), 3.2, Color(0.95, 0.25, 0.2))
+		if not e.dead: draw_circle(_map_pt(c, w, h, e.global_position), 5.5 if e.kind == "boss" else 3.2, Color(1.0, 0.45, 0.05) if e.kind == "boss" else Color(0.95, 0.25, 0.2))
 	var pp := _map_pt(c, w, h, player.global_position)
 	var dir := (_map_pt(c, w, h, player.global_position + player.forward()) - pp).normalized()
 	var side := Vector2(-dir.y, dir.x)
@@ -623,3 +629,24 @@ func _draw_panel() -> void:
 			_txt(bb.position + Vector2(0, 25), row[3], 15, Color(1, 1, 1) if en else Color(0.6, 0.6, 0.62), bb.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 			if en: _panel_btns.append([bb, row[5]])
 		y += 72
+
+## Grande barre du boss (en haut au centre) + annonces de phase.
+func _draw_boss() -> void:
+	for e in G.enemies:
+		if e.kind != "boss" or e.dead: continue
+		var st: String = e.state_name()
+		if st == "Garde" or st == "Retour": continue
+		if e.global_position.distance_to(player.global_position) > 26.0: continue
+		var w := 520.0
+		var r := Rect2((size.x - w) * 0.5, 96, w, 22)
+		_panel(Rect2(r.position - Vector2(10, 30), Vector2(w + 20, 60)), Color(0.08, 0.05, 0.04, 0.82), 6)
+		_txt(Vector2(r.position.x, r.position.y - 8), e.display_name, 17, Color(1, 0.7, 0.45))
+		_txt(Vector2(r.position.x, r.position.y - 8), "Phase %d" % e.phase, 13, Color(1, 0.85, 0.7), w, HORIZONTAL_ALIGNMENT_RIGHT)
+		_bar(r, e.hp / e.max_hp, Color(0.9, 0.3, 0.08) if e.phase < 3 else Color(1.0, 0.15, 0.05))
+		for mark in [0.6, 0.25]:
+			draw_line(Vector2(r.position.x + w * mark, r.position.y - 2), Vector2(r.position.x + w * mark, r.end.y + 2), Color(1, 0.9, 0.6, 0.9), 2.0)
+		_txt(r.position + Vector2(0, 17), "%d / %d" % [e.hp, e.max_hp], 13, Color(1, 1, 1), w, HORIZONTAL_ALIGNMENT_CENTER)
+		break
+	if _announce[1] > 0.0:
+		var a := clampf(_announce[1] / 0.5, 0.0, 1.0)
+		_txt(Vector2(0, size.y * 0.32), _announce[0], 30, Color(1, 0.8, 0.5, a), size.x, HORIZONTAL_ALIGNMENT_CENTER)

@@ -23,6 +23,8 @@ const PATHS := [
 	[3, 3, 4, -4, 1.4], [4, -4, 1, -12, 1.5], [1, -12, 0, -17, 1.7],
 	[4, -4, 12, -6, 1.1], [12, -6, 18, -8, 1.0],
 	[-2, 12, -9, 14, 0.8], [-9, 14, -13, 11, 0.7],
+	# sentier du repaire du Gardien (depuis le camp des brutes)
+	[-3, -24, -9, -25.5, 0.9], [-9, -25.5, -13, -27, 0.9],
 	# route du bourg et allées vers les portes
 	[0, 36, 0.3, 45, 1.6], [0.3, 45, 0, 52, 1.8], [-6.3, 58, -2, 58.5, 1.1], [6.3, 60, 2, 60, 1.1], [0, 71.5, 0, 64, 1.3],
 	[-8, 70, -4, 66, 0.8], [8, 72, 4, 66, 0.8], [-7, 47, -3, 50, 0.8], [7, 47, 3, 50, 0.8],
@@ -61,8 +63,13 @@ const DECOR := [
 	# --- falaises : gros rochers au pied des crêtes (tanière des rôdeurs, crête nord) ---
 	["Rock_Medium_1", 29.5, -15.5, 20, 2.6, 0.85], ["Rock_Medium_3", 28.0, -9.5, 140, 2.4, 0.85], ["Rock_Medium_2", 26.6, -18.8, 260, 2.2, 0.85],
 	["Rock_Medium_1", 31.0, -4.0, 90, 2.0, 0.85], ["Rock_Medium_3", 25.0, 0.8, 300, 1.6, 0.85],
-	["Rock_Medium_2", -14.0, -30.5, 80, 2.0, 0.85], ["Rock_Medium_1", 15.0, -31.0, 200, 2.2, 0.85], ["Rock_Medium_3", 22.0, -28.5, 30, 1.8, 0.85],
+	 ["Rock_Medium_1", 15.0, -31.0, 200, 2.2, 0.85], ["Rock_Medium_3", 22.0, -28.5, 30, 1.8, 0.85],
 	["Rock_Medium_1", -29.5, 0.5, 160, 1.8, 0.85], ["Rock_Medium_2", -28.0, 18.0, 40, 1.9, 0.85],
+	# --- repaire du Gardien de cendre : cuvette dans la crête, cerclée de rochers ---
+	["Rock_Medium_1", -23.5, -26.0, 30, 2.2, 0.85], ["Rock_Medium_3", -22.0, -32.0, 120, 2.4, 0.85], ["Rock_Medium_2", -16.0, -34.0, 200, 2.0, 0.85],
+	["Rock_Medium_1", -10.5, -31.5, 290, 1.9, 0.85], ["Rock_Medium_3", -22.5, -21.5, 70, 1.6, 0.85],
+	["DeadTree_2", -13.5, -32.5, 210, 1.1, 0.4],
+	["Pebble_Round_3", -15.0, -24.5, 0, 2.2, 0.0], ["Pebble_Round_1", -19.5, -31.0, 0, 2.4, 0.0], ["Pebble_Square_2", -12.5, -28.5, 0, 2.0, 0.0],
 	# --- rochers ---
 	["Rock_Medium_1", 9, 6, 30, 1.0, 1.2], ["Rock_Medium_3", -17, 21, 200, 0.9, 1.0], ["Rock_Medium_2", 15, 4, 90, 0.7, 0.8],
 	["Rock_Medium_2", -7, -4, 300, 0.8, 0.9], ["Rock_Medium_1", -27, 12, 120, 1.1, 1.2], ["Rock_Medium_3", 26, 14, 10, 1.0, 1.1],
@@ -83,7 +90,7 @@ const DECOR := [
 
 # Camp des brutes (nord) : accessoires du village Quaternius
 const CAMP := [
-	["Prop_Wagon", -7, -24, 35, 1.0, 1.4], ["Prop_Crate", 5, -26, 10, 1.0, 0.7], ["Prop_Crate", 6.3, -25, 50, 0.85, 0.6],
+	["Prop_Wagon", -7.5, -19.5, 35, 1.0, 1.4], ["Prop_Crate", 5, -26, 10, 1.0, 0.7], ["Prop_Crate", 6.3, -25, 50, 0.85, 0.6],
 	["Prop_Crate", 5.6, -26.2, 25, 0.7, 0.0],
 	["Prop_WoodenFence_Single", -4, -28, 0, 1.0, 0.0], ["Prop_WoodenFence_Single", -1.5, -28.6, 5, 1.0, 0.0],
 	["Prop_WoodenFence_Single", 1.2, -28.6, -5, 1.0, 0.0], ["Prop_WoodenFence_Single", 3.8, -28, -12, 1.0, 0.0],
@@ -105,6 +112,7 @@ const FLAX := [[-11, 15, 0, 1.0], [-15, 10, 70, 0.9], [-9, 21, 140, 1.05], [-16,
 const MONSTERS := {
 	"brutes": [["brute", -2.5, -21, 200], ["brute", 3.0, -22.5, 160]],
 	"rodeurs": [["rodeur", 21, -8, 250], ["rodeur", 23.5, -10.5, 220], ["rodeur", 20, -11.5, 280]],
+	"repaire": [["boss", -18, -28.5, 140]],
 }
 
 var cam: Camera3D
@@ -154,6 +162,7 @@ func _ready() -> void:
 	for d in DECOR: _place(N % d[0], d)
 	for d in CAMP: _place(P % d[0], d)
 	_build_campfire(Vector3(0, 0, -24))
+	_lair_embers()
 	var town: Node = Town.new()
 	add_child(town)
 	town.build(self)
@@ -238,6 +247,7 @@ func _build_ground() -> void:
 	mat.set_shader_parameter("seg_w", ws)
 	mat.set_shader_parameter("seg_n", PATHS.size())
 	mat.set_shader_parameter("ash_center", Vector3(0, -23, 6.5))
+	mat.set_shader_parameter("ash2", Vector3(-17, -28, 5.5))
 	m.material_override = mat
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(m)
@@ -367,6 +377,9 @@ func _place(path: String, d: Array) -> void:
 		_wind_small(n, 0.05, 1.2)
 	elif "Rock_" in path:
 		_tint(n, Color(0.66, 0.63, 0.58))
+		if d[4] >= 1.5: _dither_tree(n, 9.0, 11.5)   # gros rochers : s'effacent s'ils cachent le combat
+	elif "Pebble" in path:
+		_tint(n, Color(0.5, 0.47, 0.44))
 	if d[5] > 0.0:
 		var body := StaticBody3D.new()
 		var cs := CollisionShape3D.new()
@@ -384,7 +397,7 @@ func _place(path: String, d: Array) -> void:
 func _dither_tree(n: Node3D, dmin := 10.0, dmax := 12.5) -> void:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		for si in mi.mesh.get_surface_count():
-			var src: Material = mi.mesh.surface_get_material(si)
+			var src: Material = mi.get_surface_override_material(si) if mi.get_surface_override_material(si) else mi.mesh.surface_get_material(si)
 			if not (src is StandardMaterial3D): continue
 			if _is_foliage(src):
 				var tree_h := 6.0 if not "Bush" in src.resource_name else 1.5
@@ -465,6 +478,36 @@ func _build_campfire(pos: Vector3) -> void:
 	t.autostart = true
 	t.timeout.connect(func(): light.light_energy = 2.0 + randf() * 0.6)
 	add_child(t)
+
+## Braises qui couvent dans le repaire : lueurs orange et fumerolles.
+func _lair_embers() -> void:
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.45, 0.15)
+	light.light_energy = 2.0
+	light.omni_range = 10.0
+	light.position = Vector3(-17, h(-17, -28) + 1.5, -28)
+	add_child(light)
+	for e in [Vector3(-20.5, 0, -29.5), Vector3(-14.5, 0, -26.5), Vector3(-18.0, 0, -24.8), Vector3(-15.5, 0, -30.5)]:
+		var p := CPUParticles3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(0.7, 0.7)
+		q.material = G._fx_mat("smoke_04", Color.WHITE)
+		(q.material as StandardMaterial3D).billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		(q.material as StandardMaterial3D).vertex_color_use_as_albedo = true
+		p.mesh = q
+		p.amount = 6
+		p.lifetime = 2.2
+		p.direction = Vector3.UP
+		p.spread = 10
+		p.initial_velocity_min = 0.4
+		p.initial_velocity_max = 0.9
+		p.gravity = Vector3(0, 0.3, 0)
+		var g := Gradient.new()
+		g.set_color(0, Color(1.0, 0.45, 0.12, 0.7))
+		g.set_color(1, Color(0.25, 0.2, 0.2, 0.0))
+		p.color_ramp = g
+		p.position = Vector3(e.x, h(e.x, e.z) + 0.1, e.z)
+		add_child(p)
 
 ## Herbe : une MultiMesh par type, touffes posées à la main (aucun coût par brin).
 func _build_grass() -> void:

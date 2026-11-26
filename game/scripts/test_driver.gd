@@ -54,6 +54,11 @@ func _ready() -> void:
 		["fight", 14.0], ["shot", "apres_combat"],
 		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs_falaises"],
 		["fight", 12.0], ["shot", "rodeurs_combat"],
+		["tp", Vector3(-10, 0, -26)], ["wait", 1.0], ["shot", "repaire"],
+		["walk", Vector3(-14, 0, -27)], ["fight", 6.0], ["shot", "boss_phase1"],
+		["bosshp", 0.55], ["wait", 1.2], ["shot", "boss_phase2"], ["fight", 10.0], ["shot", "boss_pluie"],
+		["bosshp", 0.2], ["wait", 1.0], ["fight", 12.0], ["shot", "boss_fureur"],
+		["bosshp", 0.01], ["fight", 4.0], ["wait", 1.0], ["shot", "boss_vaincu"],
 		["wait", 1.0], ["shot", "fin"], ["report"],
 	]
 	_next()
@@ -74,6 +79,12 @@ func _next() -> void:
 			var n = _p().nearest_gather()
 			print("TEST gather node=", n != null)
 			if n: _p().start_gather(n)
+			_next()
+		"bosshp":
+			for e in G.enemies:
+				if e.kind == "boss" and not e.dead:
+					e.hp = e.max_hp * s[1] + 1.0
+					e.take_hit(1.0, _p().global_position, 0.0)
 			_next()
 		"tp":
 			var v: Vector3 = s[1]
