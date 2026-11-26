@@ -57,6 +57,16 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Test : attendre la capture (`await _shot`) avant l'étape suivante.
 - Ne pas placer de grand bâtiment juste au sud du point d'apparition (la caméra regarde du sud).
 
+## Retours du créateur (à appliquer en priorité)
+
+- 26 nov. : « pas si mal, mais tu peux faire beaucoup mieux » → tout améliorer : monde plus beau, combat plus fort, profondeur Albion, monde plus grand (dans l'ordre de construction).
+- 26 nov. : l'interface façon Albion est validée (moyeu de sorts, récolte à gauche du moyeu, mini-carte en losange).
+
+## Atelier de nuit
+
+Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
+Dernier chantier fait : 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore). Prochain : relief, eau et falaises de la clairière.
+
 ## Plus tard (idées en attente)
 
 - Dialogues par IA de langage (payant → seulement si un moyen gratuit existe).
