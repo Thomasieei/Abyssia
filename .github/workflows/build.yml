@@ -1,0 +1,74 @@
+name: Abyssia — vérifications, tests en jeu, APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency: { group: build, cancel-in-progress: true }
+env:
+  GODOT_VERSION: 4.7.2
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Godot (cache)
+        id: gcache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-v1
+      - name: Téléchargement de Godot
+        if: steps.gcache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip && mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          rm -f *.zip *.tpz
+      - name: Installation
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          cp ~/godot/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgl1 libglx-mesa0 > /dev/null
+      - name: Import des ressources
+        run: timeout 600 ~/godot/godot --headless --path game --import 2>&1 | grep -iE "error" | head -20 || true
+      - name: Vérification des scripts
+        run: |
+          err=0
+          for f in game/scripts/*.gd; do
+            out=$(timeout 60 ~/godot/godot --headless --path game --check-only --script "res://scripts/$(basename $f)" 2>&1 | grep -E "SCRIPT ERROR|Parse Error" | grep -v "Identifier not found" || true)
+            if [ -n "$out" ]; then echo "== $f"; echo "$out"; err=1; fi
+          done
+          exit $err
+      - name: Tests joués en jeu (captures)
+        run: |
+          mkdir -p /tmp/shots
+          ABY_TEST=fresh timeout 300 xvfb-run -a -s "-screen 0 720x1280x24" ~/godot/godot --path game --rendering-driver opengl3 --resolution 720x1280 2>&1 | grep -E "SHOT|STATE|SCRIPT|TEST" || true
+          ABY_TEST=pages timeout 400 xvfb-run -a -s "-screen 0 720x1280x24" ~/godot/godot --path game --rendering-driver opengl3 --resolution 720x1280 2>&1 | grep -E "SHOT|SCRIPT|TEST" || true
+      - uses: actions/upload-artifact@v4
+        with: { name: captures, path: /tmp/shots }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Clé de signature et réglages Android
+        run: |
+          keytool -genkeypair -v -keystore ~/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Abyssia,O=Abyssia,C=FR" > /dev/null 2>&1
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\nexport/android/debug_keystore = "%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$ANDROID_SDK_ROOT" "$JAVA_HOME" "$HOME" > ~/.config/godot/editor_settings-4.7.tres
+      - name: Export APK
+        run: |
+          mkdir -p build
+          ~/godot/godot --headless --path game --export-debug "Android" ../build/abyssia.apk 2>&1 | tail -20
+          ls -la build && test -s build/abyssia.apk
+      - name: Publier l'APK (lien fixe)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk
+          name: Abyssia — dernier APK
+          prerelease: true
+          make_latest: true
+          files: build/abyssia.apk
+          body: "APK d'Abyssia, recompilé à chaque mise à jour."
