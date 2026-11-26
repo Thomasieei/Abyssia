@@ -18,13 +18,23 @@ var attack_held := false
 var target: Node3D = null
 
 ## Sorts : nom, recharge, animation
+## Emplacements façon Albion : 3 sorts d'arme (Q W E), casque (R), plastron (D), bottes (F)
 var skills := [
-	{"id": "entaille", "name": "Entaille", "cd": 4.0, "anim": "Sword_Heavy_A"},
-	{"id": "charge", "name": "Charge", "cd": 9.0, "anim": "Sword_Dash"},
-	{"id": "fracas", "name": "Fracas", "cd": 16.0, "anim": "Sword_GroundPound"},
-	{"id": "garde", "name": "Garde", "cd": 22.0, "anim": "Sword_Block"},
+	{"id": "entaille", "slot": "arme", "name": "Entaille", "cd": 4.0, "cost": 14.0},
+	{"id": "charge", "slot": "arme", "name": "Charge", "cd": 9.0, "cost": 22.0},
+	{"id": "fracas", "slot": "arme", "name": "Fracas", "cd": 16.0, "cost": 38.0},
+	{"id": "garde", "slot": "casque", "name": "Garde du gardien", "cd": 22.0, "cost": 30.0},
+	{"id": "fureur", "slot": "plastron", "name": "Fureur", "cd": 26.0, "cost": 30.0},
+	{"id": "vent", "slot": "bottes", "name": "Pas de vent", "cd": 14.0, "cost": 18.0},
 ]
-var cd_left := [0.0, 0.0, 0.0, 0.0]
+var cd_left := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var max_energy := 200.0
+var energy := 200.0
+var _fury_t := 0.0
+var _haste_t := 0.0
+var _aura: CPUParticles3D
+var _wind: CPUParticles3D
+var _rune: MeshInstance3D
 
 var model: Node3D
 var ap: AnimationPlayer
@@ -58,6 +68,9 @@ func _ready() -> void:
 	_spawn = global_position
 	_build_model()
 	_build_bubble()
+	_aura = G.aura(self, "flame_02", Color(1.0, 0.28, 0.12, 0.55), 0.9)
+	_wind = G.aura(self, "smoke_04", Color(0.75, 1.0, 0.85, 0.35), 0.5)
+	_rune = G.ground_quad(self, "magic_03", Color(1.0, 0.82, 0.4, 0.0), 3.2)
 
 func _build_model() -> void:
 	model = load("res://assets/hero/Superhero_Male_FullBody.gltf").instantiate()
@@ -145,7 +158,9 @@ func _replay(anim: String, blend := 0.08, speed := 1.0) -> void:
 
 # --------------------------------------------------------------------------
 func _physics_process(delta: float) -> void:
-	for i in 4: cd_left[i] = maxf(cd_left[i] - delta, 0.0)
+	for i in cd_left.size(): cd_left[i] = maxf(cd_left[i] - delta, 0.0)
+	energy = minf(energy + 7.0 * delta, max_energy)
+	_tick_buffs(delta)
 	_tick_pending(delta)
 	if dead:
 		velocity = Vector3.ZERO
@@ -185,9 +200,9 @@ func _physics_process(delta: float) -> void:
 			return
 
 	if dir.length() > 0.08:
-		velocity = dir * SPEED * clampf(dir.length() * 1.15, 0.35, 1.0)
+		velocity = dir * SPEED * speed_mult() * clampf(dir.length() * 1.15, 0.35, 1.0)
 		_face(dir, delta, 14.0)
-		_play("Jog_Fwd_Loop", 0.12, 1.08)
+		_play("Sprint_Loop" if _haste_t > 0.0 else "Jog_Fwd_Loop", 0.12, 1.08)
 		_step_t -= delta
 		if _step_t <= 0.0:
 			_step_t = 0.31
@@ -274,7 +289,7 @@ func _basic_attack(t: Node3D) -> void:
 	_later(hit_at[i] / 1.15, func():
 		G.slash(global_position + forward() * 0.6, yaw, Color(1, 0.95, 0.8, 0.9), 1.6, i == 1)
 		if is_instance_valid(t) and not t.dead and t.global_position.distance_to(global_position) < ATTACK_RANGE + 0.8:
-			t.take_hit(BASE_DMG * randf_range(0.92, 1.08), global_position, 1.2, 0.0, i == 2)
+			t.take_hit(BASE_DMG * dmg_mult() * randf_range(0.92, 1.08), global_position, 1.2, 0.0, i == 2)
 			_land_hit(t, 0.055, 0.18))
 
 func _land_hit(t: Node3D, stop := 0.05, shake := 0.2) -> void:
@@ -283,10 +298,12 @@ func _land_hit(t: Node3D, stop := 0.05, shake := 0.2) -> void:
 
 # --- Sorts ---------------------------------------------------------------
 func try_skill(slot: int) -> bool:
+	if not dead and energy < skills[slot]["cost"] and cd_left[slot] <= 0.0:
+		return false
 	if dead or cd_left[slot] > 0.0 or _dash_t > 0.0:
 		if OS.get_environment("ABY_TEST") != "": print("TEST refus sort ", slot, " cd=", snappedf(cd_left[slot], 0.1), " dash=", _dash_t)
 		return false
-	if _action == "skill" and slot != 3:   # la Garde peut toujours être levée
+	if _action == "skill" and slot < 3:   # casque, plastron et bottes passent toujours
 		if OS.get_environment("ABY_TEST") != "": print("TEST refus sort ", slot, " action=", _action, " t=", snappedf(_action_t, 0.01))
 		return false
 	_stop_gather()
@@ -296,6 +313,9 @@ func try_skill(slot: int) -> bool:
 			if not _skill_charge(): return false
 		2: _skill_fracas()
 		3: _skill_garde()
+		4: _skill_fureur()
+		5: _skill_vent()
+	energy -= skills[slot]["cost"]
 	cd_left[slot] = skills[slot]["cd"]
 	cast.emit(slot, skills[slot]["cd"])
 	return true
@@ -312,8 +332,10 @@ func _skill_entaille() -> void:
 	_fade(tele, 0.35)
 	Sfx.play_at("swing", global_position, -2.0, 0.85)
 	_later(0.3, func():
-		G.slash(global_position + forward() * 0.8, yaw, Color(0.6, 0.9, 1.0, 1.0), 2.6)
-		var n := _hit_cone(3.4, 55.0, BASE_DMG * 2.4, 3.0, 0.0)
+		G.slash(global_position + forward() * 0.8, yaw, Color(1.0, 0.55, 0.25, 1.0), 2.8)
+		G.slash(global_position + forward() * 1.0, yaw, Color(1.0, 0.9, 0.6, 0.9), 2.2, true)
+		G.burst(global_position + forward() * 2.0 + Vector3.UP, "spark_05", Color(1, 0.7, 0.3, 1), 16, 6.0, 0.35, 0.35, -8.0)
+		var n := _hit_cone(3.4, 55.0, BASE_DMG * dmg_mult() * 2.4, 3.0, 0.0)
 		if n > 0: _land_hit(null, 0.075, 0.35))
 
 func _skill_charge() -> bool:
@@ -335,10 +357,14 @@ func _skill_charge() -> bool:
 	_later(0.12, func():
 		_dash_vel = dir * (dist / dash_time)
 		_dash_t = dash_time
+		for k in 5:
+			G.streak(global_position + dir * (dist * k / 5.0) + Vector3.UP * 1.0, atan2(dir.x, dir.z), Color(0.6, 1.0, 0.85, 0.55), 0.05 * k)
 		G.burst(global_position + Vector3.UP * 0.3, "smoke_04", Color(0.8, 0.75, 0.65, 0.6), 10, 2.0, 0.9, 0.5, 0.0))
 	_later(0.12 + dash_time, func():
 		_action_t = 0.35
-		var n := _hit_circle(global_position + dir * 0.8, 1.9, BASE_DMG * 1.7, 2.0, 1.3)
+		G.ring(global_position, "circle_05", Color(0.6, 1.0, 0.85, 0.9), 0.6, 5.0, 0.35)
+		G.burst(global_position + Vector3.UP * 0.3, "dirt_02", Color(0.7, 0.6, 0.45, 0.9), 14, 5.0, 0.7, 0.5, -9.0)
+		var n := _hit_circle(global_position + dir * 0.8, 1.9, BASE_DMG * dmg_mult() * 1.7, 2.0, 1.3)
 		if n > 0: _land_hit(null, 0.07, 0.4))
 	return true
 
@@ -353,8 +379,10 @@ func _skill_fracas() -> void:
 	_later(0.5, func():
 		Sfx.play_at("slam", global_position, 2.0, 0.8)
 		G.burst(global_position + Vector3.UP * 0.2, "dirt_02", Color(0.75, 0.62, 0.45, 0.9), 26, 7.0, 0.9, 0.6, -9.0)
-		G.burst(global_position + Vector3.UP * 0.4, "circle_05", Color(0.6, 0.85, 1.0, 0.8), 1, 0.01, 8.0, 0.3, 0.0)
-		var n := _hit_circle(global_position, 4.2, BASE_DMG * 3.2, 6.0, 0.6)
+		G.ring(global_position, "magic_03", Color(1.0, 0.75, 0.3, 0.95), 2.0, 9.0, 0.7)
+		G.ring(global_position, "circle_05", Color(1.0, 0.9, 0.6, 0.9), 1.0, 10.0, 0.4)
+		G.burst(global_position + Vector3.UP * 0.5, "spark_05", Color(1.0, 0.75, 0.3, 1), 24, 7.0, 0.4, 0.6, -6.0)
+		var n := _hit_circle(global_position, 4.2, BASE_DMG * dmg_mult() * 3.2, 6.0, 0.6)
 		_land_hit(null, 0.09 if n > 0 else 0.0, 0.6))
 
 func _skill_garde() -> void:
@@ -364,11 +392,55 @@ func _skill_garde() -> void:
 	shield = max_hp * 0.35
 	_shield_t = 5.0
 	_bubble.visible = true
+	_rune.visible = true
+	G.ring(global_position, "circle_05", Color(1.0, 0.85, 0.4, 0.9), 0.5, 4.5, 0.35)
 	_bubble.scale = Vector3.ONE * 0.4
 	_bubble.create_tween().tween_property(_bubble, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	G.burst(global_position + Vector3.UP, "star_06", Color(1, 0.85, 0.4, 1), 18, 3.0, 0.5, 0.6, 0.0)
 	Sfx.play_at("hit_heavy", global_position, -6.0, 1.4)
 	hp_changed.emit(hp, max_hp, shield)
+
+func dmg_mult() -> float:
+	return 1.4 if _fury_t > 0.0 else 1.0
+
+func speed_mult() -> float:
+	return 1.6 if _haste_t > 0.0 else 1.0
+
+func _skill_fureur() -> void:
+	_fury_t = 6.0
+	_aura.emitting = true
+	G.ring(global_position, "circle_05", Color(1.0, 0.3, 0.12, 0.9), 0.5, 6.0, 0.45)
+	G.burst(global_position + Vector3.UP, "flame_04", Color(1.0, 0.35, 0.1, 0.9), 22, 4.0, 0.7, 0.6, 2.0)
+	Sfx.play_at("hit_heavy", global_position, -4.0, 0.7)
+	G.shake(0.15)
+
+func _skill_vent() -> void:
+	_haste_t = 3.5
+	_wind.emitting = true
+	G.ring(global_position, "twirl_02", Color(0.7, 1.0, 0.85, 0.8), 0.8, 4.0, 0.4)
+	G.burst(global_position + Vector3.UP * 0.4, "smoke_04", Color(0.85, 1.0, 0.9, 0.6), 14, 3.0, 0.8, 0.5, 0.0)
+	Sfx.play_at("swing", global_position, -6.0, 1.4)
+
+func _tick_buffs(delta: float) -> void:
+	if _fury_t > 0.0:
+		_fury_t -= delta
+		if _fury_t <= 0.0: _aura.emitting = false
+	if _haste_t > 0.0:
+		_haste_t -= delta
+		if _haste_t <= 0.0: _wind.emitting = false
+	if _shield_t > 0.0:
+		_rune.rotation.y += delta * 1.5
+		var m: StandardMaterial3D = _rune.mesh.material
+		m.albedo_color.a = minf(0.85, _shield_t)
+	elif _rune.visible:
+		_rune.visible = false
+
+func buff_left(i: int) -> float:
+	match i:
+		3: return _shield_t
+		4: return _fury_t
+		5: return _haste_t
+	return 0.0
 
 func _tick_shield(delta: float) -> void:
 	if _shield_t <= 0.0: return

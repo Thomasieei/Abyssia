@@ -21,14 +21,14 @@ func _ready() -> void:
 	steps = [
 		["wait", 1.5], ["shot", "depart"],
 		["walk", Vector3(-3, 0, 18)], ["shot", "chemin"],
-		["walk", Vector3(-10.5, 0, 13.6)], ["gather"], ["wait", 1.0], ["shot", "recolte"], ["wait", 1.6], ["shot", "recolte_fin"],
+		["walk", Vector3(-10.5, 0, 13.6)], ["wait", 0.3], ["shot", "bouton_recolte"], ["gather"], ["wait", 1.0], ["shot", "recolte"], ["wait", 1.6], ["shot", "recolte_fin"],
 		["walk", Vector3(-1, 0, 4)], ["walk", Vector3(2, 0, -11)], ["shot", "vers_camp"],
 		["walk", Vector3(0.5, 0, -14.5)], ["wait", 0.6], ["shot", "alerte"],
 		["attack", 1.2], ["shot", "combat"],
 		["skill", 0], ["wait", 0.32], ["shot", "entaille"],
 		["attack", 1.0], ["wait_tele"], ["shot", "zone_ennemie"],
 		["skill", 2], ["wait", 0.53], ["shot", "fracas"], ["wait", 1.4],
-		["skill", 3], ["wait", 0.3], ["shot", "garde"],
+		["skill", 3], ["skill", 4], ["skill", 5], ["wait", 0.3], ["shot", "garde_fureur_vent"],
 		["attack", 2.0], ["skill", 1], ["wait", 0.35], ["shot", "charge"],
 		["fight", 14.0], ["shot", "apres_combat"],
 		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs"],
@@ -58,7 +58,9 @@ func _next() -> void:
 			var ok = _p().try_skill(s[1])
 			print("TEST skill ", s[1], " ok=", ok)
 			_next()
-		"shot": _shot(s[1]); _next()
+		"shot":
+			await _shot(s[1])
+			_next()
 		"report":
 			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
 			for e in G.enemies: print("TEST enemy ", e.kind, " etat=", e.state_name(), " hp=", int(e.hp))

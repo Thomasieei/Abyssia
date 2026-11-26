@@ -260,6 +260,7 @@ func _build_campfire(pos: Vector3) -> void:
 		s.rotation.y = a
 		s.scale = Vector3.ONE * 2.2
 		add_child(s)
+		_tint(s, Color(0.45, 0.42, 0.4))
 	var light := OmniLight3D.new()
 	light.position = pos + Vector3.UP * 1.2
 	light.light_color = Color(1.0, 0.6, 0.3)

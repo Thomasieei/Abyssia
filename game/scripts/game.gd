@@ -166,3 +166,99 @@ func telegraph(pos: Vector3, yaw: float, shape: int, size: Vector2, color: Color
 	m.global_position = Vector3(pos.x, 0.06, pos.z)
 	m.rotation.y = yaw
 	return m
+
+func _fx_mat(texname: String, color: Color, additive := true) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	if additive: mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = tex(texname)
+	mat.albedo_color = color
+	return mat
+
+## Décalque lumineux au sol qui s'agrandit et s'efface (onde de choc, rune).
+func ring(pos: Vector3, texname: String, color: Color, from_size: float, to_size: float, time: float) -> void:
+	var m := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.orientation = PlaneMesh.FACE_Y
+	q.size = Vector2.ONE
+	# mélange normal (pas additif) : les couleurs restent vives sur l'herbe claire
+	var mat := _fx_mat(texname, Color(color.r * 1.2, color.g * 1.0, color.b * 0.9, color.a), false)
+	q.material = mat
+	m.mesh = q
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(m)
+	m.global_position = Vector3(pos.x, 0.08, pos.z)
+	m.scale = Vector3(from_size, 1, from_size)
+	m.rotation.y = randf() * TAU
+	var tw := m.create_tween().set_parallel()
+	tw.tween_property(m, "scale", Vector3(to_size, 1, to_size), time).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_property(mat, "albedo_color:a", 0.0, time).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(m.queue_free)
+
+## Image rémanente allongée (traînée de charge).
+func streak(pos: Vector3, yaw: float, color: Color, delay: float) -> void:
+	var m := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.orientation = PlaneMesh.FACE_Y
+	q.size = Vector2(1.2, 2.4)
+	var mat := _fx_mat("light_01", color)
+	q.material = mat
+	m.mesh = q
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(m)
+	m.global_position = pos
+	m.rotation.y = yaw
+	mat.albedo_color.a = 0.0
+	var tw := m.create_tween()
+	tw.tween_interval(delay)
+	tw.tween_property(mat, "albedo_color:a", color.a, 0.05)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.35)
+	tw.tween_callback(m.queue_free)
+
+## Particules continues attachées à un personnage (aura), éteintes par défaut.
+func aura(parent: Node3D, texname: String, color: Color, size: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(size, size)
+	var mat := _fx_mat(texname, Color.WHITE)
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	q.material = mat
+	p.mesh = q
+	p.amount = 16
+	p.lifetime = 0.7
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+	p.emission_ring_axis = Vector3.UP
+	p.emission_ring_radius = 0.6
+	p.emission_ring_inner_radius = 0.3
+	p.emission_ring_height = 0.2
+	p.direction = Vector3.UP
+	p.spread = 15
+	p.initial_velocity_min = 1.0
+	p.initial_velocity_max = 2.2
+	p.gravity = Vector3(0, 1.0, 0)
+	var g := Gradient.new()
+	g.set_color(0, color)
+	g.set_color(1, Color(color.r, color.g, color.b, 0.0))
+	p.color_ramp = g
+	p.emitting = false
+	p.position.y = 0.2
+	parent.add_child(p)
+	return p
+
+## Disque texturé au sol attaché à un personnage (rune de garde).
+func ground_quad(parent: Node3D, texname: String, color: Color, size: float) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.orientation = PlaneMesh.FACE_Y
+	q.size = Vector2(size, size)
+	q.material = _fx_mat(texname, color)
+	m.mesh = q
+	m.position.y = 0.07
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	m.visible = false
+	parent.add_child(m)
+	return m
