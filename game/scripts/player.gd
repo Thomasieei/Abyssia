@@ -306,6 +306,87 @@ func _basic_attack(t: Node3D) -> void:
 			t.take_hit(BASE_DMG * dmg_mult() * randf_range(0.92, 1.08), global_position, 1.2, 0.0, i == 2)
 			_land_hit(t, 0.055, 0.18))
 
+# --- Contre (façon Lugaru) : appuyer sur l'attaque juste avant que le coup ennemi parte -------
+const COUNTER_WINDOW := 0.32      # s avant l'impact
+const PERFECT_WINDOW := 0.14
+var _roll_t0 := -10.0
+var _perfect_dodged := false
+
+func try_counter() -> bool:
+	if dead or _dash_t > 0.0 or _action == "counter": return false
+	var best: Node3D = null
+	var best_t := INF
+	for e in G.enemies:
+		var w: float = e.counter_window()
+		if w < 0.0 or w > COUNTER_WINDOW: continue
+		if e.target != self: continue
+		var reach: float = e.data.range + e.radius + 1.6
+		if e.global_position.distance_to(global_position) > reach: continue
+		if w < best_t:
+			best_t = w
+			best = e
+	if best == null: return false
+	_counter(best, best_t <= PERFECT_WINDOW)
+	return true
+
+func _counter(e: Node3D, perfect: bool) -> void:
+	_stop_gather()
+	face_now(e.global_position)
+	target = e
+	G.target_changed.emit(e)
+	e.countered(perfect)
+	_invuln_t = 0.6
+	# pas d'appel vers l'ennemi pour que la riposte porte
+	var gap: float = e.global_position.distance_to(global_position) - (e.radius + 1.3)
+	if gap > 0.2:
+		_dash_vel = (e.global_position - global_position).normalized() * (gap / 0.16)
+		_dash_vel.y = 0.0
+		_dash_t = 0.16
+	_replay("Sword_Block", 0.04, 1.8)
+	_action = "counter"
+	_action_t = 0.62
+	var hit_pos: Vector3 = global_position.lerp(e.global_position, 0.45) + Vector3.UP * 1.3
+	G.burst(hit_pos, "spark_05", Color(1.0, 0.92, 0.6, 1.0), 26 if perfect else 16, 7.0, 0.35, 0.45, -3.0)
+	G.ring(global_position + forward() * 0.8, "circle_05", Color(1.0, 0.85, 0.45, 0.9), 0.4, 5.0 if perfect else 3.5, 0.35)
+	Sfx.play_at("hit_heavy", global_position, 2.0, 1.35 if perfect else 1.15)
+	Sfx.play_at("parade", global_position, 0.0, 1.0)
+	G.stats.contres += 1
+	energy = minf(energy + (30.0 if perfect else 15.0), max_energy)
+	if perfect:
+		G.stats.contres_parfaits += 1
+		G.slowmo(0.22, 520)
+		G.shake(0.35)
+		G.callout.emit("Contre parfait !", Color(1.0, 0.85, 0.35))
+	else:
+		G.hitstop(110)
+		G.shake(0.2)
+		G.callout.emit("Contre", Color(0.95, 0.92, 0.85))
+	# riposte : un coup lourd pendant que l'ennemi est déséquilibré
+	_later(0.2, func():
+		if dead or not is_instance_valid(e) or e.dead: return
+		face_now(e.global_position)
+		_replay("Sword_Heavy_A", 0.05, 1.5)
+		Sfx.play_at("swing", global_position, -2.0, 0.9)
+		_later(0.16, func():
+			if dead or not is_instance_valid(e) or e.dead: return
+			G.slash(global_position + forward() * 0.7, rotation.y, Color(1, 0.85, 0.45, 1.0), 2.0, true)
+			if OS.get_environment("ABY_TEST") != "": print("TEST riposte ", e.kind, " dist=", snappedf(e.global_position.distance_to(global_position), 0.1))
+			if e.global_position.distance_to(global_position) < ATTACK_RANGE + e.radius + 1.2:
+				e.take_hit(BASE_DMG * dmg_mult() * (4.0 if perfect else 2.4), global_position, 2.2, 0.0, true)
+				_land_hit(e, 0.09, 0.4)))
+
+func _perfect_dodge() -> void:
+	if dead or _perfect_dodged: return
+	_perfect_dodged = true
+	G.stats.esquives_parfaites += 1
+	G.slowmo(0.3, 420)
+	G.callout.emit("Esquive parfaite !", Color(0.6, 1.0, 0.85))
+	Sfx.play_at("parade", global_position, -6.0, 1.6)
+	energy = minf(energy + 25.0, max_energy)
+	for i in skills.size():
+		if skills[i]["id"] == "roulade": cd_left[i] *= 0.4
+	G.burst(global_position + Vector3.UP * 0.8, "twirl_02", Color(0.7, 1.0, 0.9, 0.8), 10, 3.0, 0.5, 0.6, 0.0)
+
 func _land_hit(t: Node3D, stop := 0.05, shake := 0.2) -> void:
 	G.hitstop(int(stop * 1000.0))
 	G.shake(shake)
@@ -472,6 +553,15 @@ func _skill_roulade() -> bool:
 	_dash_vel = dir * 11.0
 	_dash_t = 0.45
 	_invuln_t = 0.5
+	_roll_t0 = Time.get_ticks_msec() / 1000.0
+	_perfect_dodged = false
+	# esquive parfaite : on roule pendant que le coup ennemi va partir (fenêtre courte)
+	for e in G.enemies:
+		var w: float = e.counter_window()
+		if w < 0.0 or w > 0.3 or e.target != self: continue
+		if e.global_position.distance_to(global_position) > e.data.range + e.radius + 2.5: continue
+		_later(w, _perfect_dodge)
+		break
 	G.burst(global_position + Vector3.UP * 0.3, "smoke_04", Color(0.85, 0.8, 0.7, 0.6), 10, 2.0, 0.8, 0.5, 0.0)
 	Sfx.play_at("swing", global_position, -8.0, 0.8)
 	return true

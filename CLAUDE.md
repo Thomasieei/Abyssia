@@ -67,6 +67,11 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - `_tint` puis `_dither_tree` : le tramage doit partir du matériau déjà teinté (matériau de surface remplacé).
 - Grand décor près d'une arène (arbres morts, gros rochers) : le tramer ou l'écarter, sinon il cache le combat.
 - `ABY_TEST=close` + `ABY_CLOSE=1` : gros plans du héros, des brutes, des rôdeurs et du boss (vérifier les textures).
+- Réactions aux coups : `scripts/hit_react.gd` (SkeletonModifier3D sur Spine/Chest/Head, ressort amorti, oscillation de titubement), calculé seulement quand une réaction est active. Monstres sans animation de coup : **chute = début de « Die » (0,55 → 1,42 s), pause, puis la même à l'envers** pour se relever.
+- Équilibre (`poise`) par espèce : brisé → `Titube` (ou `Chute` si coup lourd) ; l'attaque en préparation est annulée.
+- Contre : toucher l'attaque dans les 0,32 s avant l'impact (zone qui blanchit), parfait < 0,14 s (ralenti `G.slowmo`, chute de l'ennemi, riposte ×4). Esquive parfaite = roulade lancée dans les 0,3 s avant un coup. La pluie du boss ne se contre pas. Tout est compté dans `G.stats` (future progression par le jeu).
+- Annonces (`announce`, haut) et exploits (`callout`, sous le héros) ne doivent pas se chevaucher.
+- `ABY_TEST=contre` : contre parfait, riposte, chute, relevé, contre simple, titubement, esquive parfaite, rôdeur, boss, bord doré du ralenti.
 - `ABY_TEST=relief` : captures de la crête nord, des falaises est, des collines ouest et de l'étang.
 
 ## Retours du créateur (à appliquer en priorité)
@@ -77,9 +82,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 ## Atelier de nuit
 
 Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
-Derniers chantiers faits : héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
+Derniers chantiers faits : réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
 Boss fait : Gardien de cendre (repaire au nord-ouest du camp des brutes, 3 phases, rejetons, pluie de cendres, souffle en cône, Cœur ardent).
-Prochain : réactions des monstres aux coups (recul, titubement, chute), contres et esquives (fenêtre de parade façon Lugaru, ralenti sur contre parfait), puis une nouvelle espèce.
+Prochain : une nouvelle espèce (avec ses propres attaques à contrer ou esquiver), puis les habitants du bourg (tenues Peasant), puis la progression par le jeu (techniques nées des contres et esquives de `G.stats`).
 
 ## Plus tard (idées en attente)
 

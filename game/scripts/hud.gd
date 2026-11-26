@@ -25,6 +25,7 @@ var _fps := 60.0
 var _sb_cache: StyleBoxFlat
 var show_debug := true
 var _announce := ["", 0.0]
+var _callout := ["", 0.0, Color.WHITE]
 
 # couleur et texture de fond de chaque sort (reconnaissable en un coup d'œil)
 const SKILL_STYLE := {
@@ -51,6 +52,7 @@ func _ready() -> void:
 	G.item_gained.connect(_on_item)
 	G.target_changed.connect(func(t): _target = t)
 	G.announce.connect(func(m): _announce = [m, 3.0])
+	G.callout.connect(func(m, c): _callout = [m, 1.3, c])
 	G.boss_defeated.connect(func(_b): _announce = ["Le Gardien de cendre est tombé !", 4.0])
 	player.cast.connect(func(slot, cd):
 		_cd_total[slot] = cd
@@ -117,7 +119,9 @@ func _input(ev: InputEvent) -> void:
 		elif ev.keycode == KEY_G:
 			var n: Node3D = player.nearest_gather()
 			if n: player.start_gather(n)
-		elif ev.keycode == KEY_SPACE: player.attack_held = true
+		elif ev.keycode == KEY_SPACE:
+			if not player.attack_held: player.try_counter()
+			player.attack_held = true
 	elif ev is InputEventKey and not ev.pressed and ev.keycode == KEY_SPACE:
 		player.attack_held = false
 
@@ -137,7 +141,9 @@ func _press(b: String, down: bool) -> void:
 	_pressed[b] = down
 	if b == "attack":
 		player.attack_held = down
-		if down: _flash[0] = 1.0
+		if down:
+			_flash[0] = 1.0
+			player.try_counter()
 	elif down and b.begins_with("s"):
 		var i := int(b.substr(1))
 		if not player.try_skill(i): _flash[i + 1] = -1.0
@@ -241,6 +247,7 @@ func _process(delta: float) -> void:
 	_fps = lerpf(_fps, 1.0 / maxf(G.real_dt, 0.001), 0.05)
 	for i in _flash.size(): _flash[i] = move_toward(_flash[i], 0.0, delta * 3.0)
 	_announce[1] = maxf(_announce[1] - delta, 0.0)
+	_callout[1] = maxf(_callout[1] - G.real_dt, 0.0)
 	for t in _toasts: t[2] -= delta
 	_toasts = _toasts.filter(func(t): return t[2] > 0.0)
 	_silver_shown = lerpf(_silver_shown, float(G.silver), minf(delta * 8.0, 1.0))
@@ -291,6 +298,35 @@ func _txt(p: Vector2, s: String, sz: int, col: Color, w := -1.0, align := HORIZO
 	draw_string_outline(font, p, s, align, w, sz, 4, Color(0, 0, 0, 0.85))
 	draw_string(font, p, s, align, w, sz, col)
 
+# --- Ralenti et exploits : bord d'écran doré + mot qui jaillit --------------------
+func _draw_slowmo() -> void:
+	var sl := G.slowmo_left()
+	if sl > 0.0 or _callout[1] > 0.0:
+		var a := clampf(sl / 0.15, 0.0, 1.0) * 0.4
+		if a > 0.0:
+			var c: Color = _callout[2]
+			var o := Color(c.r, c.g, c.b, a)
+			var i := Color(c.r, c.g, c.b, 0.0)
+			var w := size.x
+			var hh := size.y
+			var m := 110.0
+			var oo := PackedColorArray([o, o, i, i])
+			var oi := PackedColorArray([o, i, i, o])
+			draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w - m, m), Vector2(m, m)]), oo)
+			draw_polygon(PackedVector2Array([Vector2(0, hh), Vector2(m, hh - m), Vector2(w - m, hh - m), Vector2(w, hh)]), oi)
+			draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(m, m), Vector2(m, hh - m), Vector2(0, hh)]), oi)
+			draw_polygon(PackedVector2Array([Vector2(w, 0), Vector2(w, hh), Vector2(w - m, hh - m), Vector2(w - m, m)]), oo)
+	if _callout[1] > 0.0:
+		var t: float = 1.3 - _callout[1]
+		var sc := 1.0 + 0.6 * maxf(0.0, 1.0 - t / 0.12) if t < 0.12 else 1.0
+		var al := clampf(_callout[1] / 0.35, 0.0, 1.0)
+		var col: Color = _callout[2]
+		col.a = al
+		var center := Vector2(size.x * 0.5, size.y * 0.66)
+		draw_set_transform(center, 0.0, Vector2.ONE * sc)
+		_txt(Vector2(-size.x * 0.5, 0), _callout[0], 38, col, size.x, HORIZONTAL_ALIGNMENT_CENTER)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 # --- Dessin ---------------------------------------------------------------------
 func _draw() -> void:
 	if cam == null: return
@@ -303,6 +339,7 @@ func _draw() -> void:
 	_draw_loot()
 	_draw_hub()
 	_draw_joystick()
+	_draw_slowmo()
 	_draw_panel()
 	if show_debug:
 		_txt(Vector2(size.x - 70, size.y - 10), "%d i/s" % roundi(_fps), 12, Color(1, 1, 1, 0.45))

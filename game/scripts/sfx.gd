@@ -12,6 +12,7 @@ const BANKS := {
 	"loot": ["handleCoins", "handleCoins2"],
 	"pickup": ["dropLeather"],
 	"ui": ["metalClick"],
+	"parade": ["parade"],
 }
 var _streams := {}
 var _pool: Array[AudioStreamPlayer] = []
@@ -24,7 +25,9 @@ func _ready() -> void:
 	for k in BANKS:
 		var arr: Array[AudioStream] = []
 		for f in BANKS[k]:
-			var s: AudioStream = load("res://assets/sfx/%s.ogg" % f)
+			var path := "res://assets/sfx/%s.ogg" % f
+			if not ResourceLoader.exists(path): path = "res://assets/sfx/%s.wav" % f
+			var s: AudioStream = load(path)
 			if s: arr.append(s)
 		_streams[k] = arr
 	for i in 10:

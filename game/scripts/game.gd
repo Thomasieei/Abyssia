@@ -5,6 +5,7 @@ signal silver_changed(v: int)
 signal item_gained(id: String, amount: int)
 signal target_changed(t)
 signal announce(msg: String)
+signal callout(msg: String, color: Color)   # « Contre parfait ! », « Esquive parfaite ! »
 signal boss_defeated(boss)
 
 var world: Node3D
@@ -112,8 +113,12 @@ func _process(_d: float) -> void:
 	var now := Time.get_ticks_usec()
 	if _last_us > 0: real_dt = clampf((now - _last_us) / 1000000.0, 0.0, 0.25)
 	_last_us = now
-	if _stop_until > 0 and Time.get_ticks_msec() >= _stop_until:
+	var ms := Time.get_ticks_msec()
+	if _stop_until > 0 and ms >= _stop_until:
 		_stop_until = 0
+		Engine.time_scale = slow_scale if ms < _slow_until else 1.0
+	if _slow_until > 0 and ms >= _slow_until and _stop_until == 0:
+		_slow_until = 0
 		Engine.time_scale = 1.0
 
 # --- Ressenti -------------------------------------------------------------
@@ -121,6 +126,21 @@ func _process(_d: float) -> void:
 func hitstop(ms: int) -> void:
 	Engine.time_scale = 0.04
 	_stop_until = maxi(_stop_until, Time.get_ticks_msec() + ms)
+
+## Ralenti (temps réel en ms) : contre parfait, esquive parfaite.
+var _slow_until := 0
+var slow_scale := 1.0
+func slowmo(scale: float, ms: int) -> void:
+	slow_scale = scale
+	_slow_until = Time.get_ticks_msec() + ms
+	if _stop_until == 0: Engine.time_scale = scale
+
+func slowmo_left() -> float:
+	return maxf(_slow_until - Time.get_ticks_msec(), 0.0) / 1000.0
+
+## Ce que le joueur fait vraiment (servira à la progression par le jeu).
+var tip_contre := false
+var stats := {"contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0}
 
 func shake(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)

@@ -8,26 +8,26 @@ const KINDS := {
 		"scene": "res://assets/monsters/brute.glb", "name": "Brute de lave", "scale": 1.45,
 		"hp": 340.0, "dmg": 42.0, "speed": 3.3, "radius": 0.9, "aggro": 9.0,
 		"range": 2.8, "windup": 0.95, "attack_anim_at": 0.45, "recover": 0.9,
-		"silver": [14, 22], "drop": "cendre", "flee_at": 0.0, "color": Color(1.0, 0.45, 0.15),
+		"poise": 110.0, "silver": [14, 22], "drop": "cendre", "flee_at": 0.0, "color": Color(1.0, 0.45, 0.15),
 	},
 	"rodeur": {
 		"scene": "res://assets/monsters/rodeur.glb", "name": "Rôdeur aveugle", "scale": 1.12,
 		"hp": 250.0, "dmg": 26.0, "speed": 6.2, "radius": 0.55, "aggro": 11.0,
 		"range": 4.2, "windup": 0.6, "attack_anim_at": 0.35, "recover": 0.7,
-		"silver": [6, 11], "drop": "griffe", "flee_at": 0.3, "color": Color(0.7, 0.75, 0.95),
+		"poise": 70.0, "silver": [6, 11], "drop": "griffe", "flee_at": 0.3, "color": Color(0.7, 0.75, 0.95),
 	},
 	"boss": {
 		"scene": "res://assets/monsters/brute.glb", "name": "Gardien de cendre", "scale": 2.3,
 		"hp": 2200.0, "dmg": 62.0, "speed": 3.1, "radius": 1.5, "aggro": 10.0,
 		"range": 4.4, "windup": 1.15, "attack_anim_at": 0.45, "recover": 0.85,
-		"silver": [110, 150], "drop": "coeur_ardent", "flee_at": 0.0, "color": Color(1.0, 0.35, 0.08),
+		"poise": 480.0, "silver": [110, 150], "drop": "coeur_ardent", "flee_at": 0.0, "color": Color(1.0, 0.35, 0.08),
 		"tint": Color(1.25, 0.62, 0.45), "leash": 15.0, "respawn": 120.0,
 	},
 	"rejeton": {
 		"scene": "res://assets/monsters/rodeur.glb", "name": "Rejeton de braise", "scale": 0.85,
 		"hp": 110.0, "dmg": 16.0, "speed": 5.6, "radius": 0.45, "aggro": 14.0,
 		"range": 3.6, "windup": 0.55, "attack_anim_at": 0.3, "recover": 0.6,
-		"silver": [2, 4], "drop": "", "flee_at": 0.0, "color": Color(1.0, 0.5, 0.2),
+		"poise": 45.0, "silver": [2, 4], "drop": "", "flee_at": 0.0, "color": Color(1.0, 0.5, 0.2),
 		"tint": Color(1.4, 0.55, 0.3), "leash": 22.0, "respawn": -1.0,
 	},
 }
@@ -76,6 +76,13 @@ var _stuck_t := 0.0
 var _last_pos := Vector3.ZERO
 var _num_stack := 0
 var _num_t := 0
+# réactions aux coups : ressort du buste, équilibre (poise) qui se brise, titubement, chute
+const HitReact := preload("res://scripts/hit_react.gd")
+var react: HitReact
+var poise := 100.0
+var _poise_idle := 0.0
+var _down_phase := 0
+var _cue := false
 
 func setup(k: String, pos: Vector3, yaw: float) -> void:
 	kind = k
@@ -141,6 +148,11 @@ func _ready() -> void:
 	for m in model.find_children("*", "MeshInstance3D", true, false):
 		m.material_overlay = _flash
 		_meshes.append(m)
+	poise = data.poise
+	var sk: Skeleton3D = model.find_child("Skeleton3D")
+	react = HitReact.new()
+	sk.add_child(react)
+	react.setup(sk, 0.45 if kind == "boss" else 1.0)
 	_build_hsm()
 	ap.play("Idle")
 	ap.seek(randf() * 2.0, true)
@@ -158,6 +170,8 @@ func _build_hsm() -> void:
 	var s_flee := _state("Fuite", _flee_enter, _flee_update)
 	var s_stun := _state("Etourdi", _stun_enter, _stun_update)
 	var s_dead := _state("Mort", _dead_enter, _dead_update)
+	var s_stag := _state("Titube", _stagger_enter, _stagger_update)
+	var s_down := _state("Chute", _down_enter, _down_update, _down_exit)
 	hsm.initial_state = s_guard
 	hsm.add_transition(s_guard, s_alert, &"aggro")
 	hsm.add_transition(s_return, s_alert, &"aggro")
@@ -171,6 +185,10 @@ func _build_hsm() -> void:
 	hsm.add_transition(s_flee, s_chase, &"done")
 	hsm.add_transition(s_stun, s_chase, &"done")
 	hsm.add_transition(hsm.anystate(), s_stun, &"stun")
+	hsm.add_transition(hsm.anystate(), s_stag, &"stagger")
+	hsm.add_transition(hsm.anystate(), s_down, &"knockdown")
+	hsm.add_transition(s_stag, s_chase, &"done")
+	hsm.add_transition(s_down, s_chase, &"done")
 	hsm.add_transition(hsm.anystate(), s_dead, &"die")
 	hsm.add_transition(s_dead, s_guard, &"respawn")
 	hsm.initialize(self)
@@ -275,6 +293,7 @@ func _chase_update(delta: float) -> void:
 
 # Attaque annoncée : zone rouge au sol, puis frappe, puis récupération
 func _attack_enter() -> void:
+	_cue = false
 	_atk_phase = 0
 	_atk_t = _windup()
 	var to := target.global_position - global_position
@@ -301,6 +320,13 @@ func _attack_update(delta: float) -> void:
 			_settle(delta)
 			if is_instance_valid(_tele):
 				_tele.material_override.set_shader_parameter("progress", 1.0 - _atk_t / _windup())
+				# signal de contre : la zone blanchit quand il est temps de parer
+				if _atk_t <= 0.32 and not _cue:
+					_cue = true
+					_tele.material_override.set_shader_parameter("color", Color(1.0, 0.93, 0.7, 0.95))
+					if not G.tip_contre and target == G.player:
+						G.tip_contre = true
+						G.announce.emit("Zone blanche : touche l'attaque pour contrer !")
 			for r in _rain:
 				if is_instance_valid(r): r.material_override.set_shader_parameter("progress", 1.0 - _atk_t / _windup())
 			if _atk_t <= data.attack_anim_at and not ap.is_playing():
@@ -445,6 +471,75 @@ func _respawn() -> void:
 	G.burst(global_position + Vector3.UP * 0.5, "smoke_04", Color(0.4, 0.35, 0.45, 0.7), 14, 2.5, 1.2, 0.8, 0.5)
 	_send(&"respawn")
 
+func _physics_process(delta: float) -> void:
+	if react.active(): react.step(delta)
+	if poise < data.poise:
+		_poise_idle -= delta
+		if _poise_idle <= 0.0: poise = minf(poise + data.poise * 0.35 * delta, data.poise)
+
+# Titubement : l'équilibre est brisé, le monstre recule en vacillant (attaque annulée)
+func _stagger_enter() -> void:
+	_timer = 1.5 if kind == "boss" else 1.15
+	_play("Walk", 0.1, 0.45)
+	react.stagger(0.32)
+	G.burst(global_position + Vector3.UP * (2.2 * data.scale), "star_06", Color(1, 0.95, 0.6, 1), 5, 1.2, 0.4, 0.5, 0.0)
+
+func _stagger_update(delta: float) -> void:
+	_settle(delta)
+	_timer -= delta
+	if _timer <= 0.0: _send(&"done")
+
+# Chute : il tombe (début de l'animation de mort), reste à terre, puis se relève (la même, à l'envers)
+func _down_enter() -> void:
+	_down_phase = 0
+	_timer = 0.0
+	_play("Die", 0.08, 1.5)
+	ap.seek(0.55, true)
+	Sfx.play_at("slam", global_position, -4.0, 0.8)
+
+func _down_update(delta: float) -> void:
+	_settle(delta)
+	_timer += delta
+	match _down_phase:
+		0:
+			if ap.current_animation_position >= 1.42:
+				ap.pause()
+				_down_phase = 1
+				_timer = 0.0
+				G.burst(global_position + Vector3.UP * 0.2, "dirt_02", Color(0.55, 0.45, 0.35, 0.9), 16, 3.5, 0.8, 0.6, -6.0)
+				G.shake(0.2)
+		1:
+			if _timer >= (2.2 if kind == "boss" else 1.4):
+				_down_phase = 2
+				ap.speed_scale = -1.25
+				ap.play()
+		2:
+			if ap.current_animation_position <= 0.6:
+				_send(&"done")
+
+func _down_exit() -> void:
+	ap.speed_scale = 1.0
+	_play("Idle", 0.25)
+
+## Fenêtre de contre : temps restant avant que le coup parte (−1 si rien à contrer).
+func counter_window() -> float:
+	if dead or state_name() != "Attaque" or _atk_phase != 0: return -1.0
+	if kind == "boss" and _pattern == "pluie": return -1.0
+	return _atk_t
+
+## Le joueur a paré : le coup ne part pas.
+func countered(perfect: bool) -> void:
+	if is_instance_valid(_tele): _tele.queue_free()
+	for r in _rain:
+		if is_instance_valid(r): r.queue_free()
+	_rain.clear()
+	poise = 0.0
+	_poise_idle = 3.0
+	if perfect or kind == "rodeur" or kind == "rejeton":
+		_send(&"knockdown")
+	else:
+		_send(&"stagger")
+
 # --- Coups reçus -------------------------------------------------------
 func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := false) -> void:
 	if dead: return
@@ -460,6 +555,9 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 	var d := global_position - from
 	d.y = 0
 	_push = d.normalized() * knock * (2.6 if kind == "rodeur" else 1.4)
+	# le buste encaisse : il plie à l'opposé du coup puis revient
+	var dl := model.global_transform.basis.inverse() * d.normalized()
+	react.kick(dl, 0.55 if heavy else 0.3)
 	# flash blanc
 	_flash.albedo_color.a = 0.75
 	create_tween().tween_property(_flash, "albedo_color:a", 0.0, 0.14)
@@ -474,7 +572,16 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 		return
 	if st == "Garde" or st == "Retour":
 		_send(&"aggro")
-	elif stun > 0.0 and st != "Mort" and kind != "boss":
+		return
+	# équilibre : les coups lourds le brisent plus vite ; brisé => titubement (ou chute)
+	if st != "Chute" and st != "Titube":
+		poise -= dmg * (0.9 if heavy else 0.45) * (1.0 if knock < 3.0 else 1.6)
+		_poise_idle = 2.5
+		if poise <= 0.0:
+			poise = data.poise
+			_send(&"knockdown" if heavy and kind != "boss" else &"stagger")
+			return
+	if stun > 0.0 and st != "Mort" and st != "Chute" and kind != "boss":
 		_stun_t = stun
 		_send(&"stun")
 
@@ -561,7 +668,7 @@ func _check_phase() -> void:
 
 func _phase_fx(msg: String) -> void:
 	G.announce.emit(msg)
-	_play("Roar", 0.1, 1.0)
+	if state_name() != "Chute": _play("Roar", 0.1, 1.0)
 	G.shake(0.5)
 	G.ring(global_position, "circle_05", Color(1.0, 0.35, 0.1, 0.9), 1.0, 14.0, 0.6)
 	Sfx.play_at("slam", global_position, 4.0, 0.5)

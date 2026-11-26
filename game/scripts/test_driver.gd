@@ -9,6 +9,7 @@ var _shot_n := 0
 var _frames := 0
 var _fps_acc := 0.0
 var _fps_n := 0
+var _last_e: Node = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -24,6 +25,19 @@ func _ready() -> void:
 		return
 	if OS.get_environment("ABY_TEST") == "carte":
 		_render_map()
+		return
+	if OS.get_environment("ABY_TEST") == "contre":
+		steps = [["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.8], ["walk", Vector3(0.5, 0, -19.5)],
+			["parry", 0.09], ["wait", 0.04], ["shot", "contre_parfait"], ["wait", 0.3], ["shot", "riposte"],
+			["wait", 0.5], ["shot", "chute"], ["wait", 0.9], ["shot", "a_terre"], ["wait", 1.6], ["shot", "releve"],
+			["parry", 0.27], ["wait", 0.03], ["shot", "contre"], ["wait", 0.35], ["shot", "titube"],
+			["equip", "bottes_rodeur"], ["roll", 0.1], ["wait", 0.12], ["shot", "esquive_parfaite"],
+			["attack", 0.55], ["shot", "recul"], ["attack", 0.3], ["shot", "recul2"],
+			["tp", Vector3(20.5, 0, -3.5)], ["wait", 0.5], ["walk", Vector3(21.5, 0, -7.0)], ["parry", 0.1], ["wait", 0.05], ["shot", "contre_rodeur"], ["state"],
+			["wait", 1.6], ["state"], ["shot", "rodeur_chute"],
+			["tp", Vector3(-14, 0, -26)], ["wait", 0.5], ["walk", Vector3(-15.5, 0, -27.0)], ["parry", 0.1], ["wait", 0.05], ["shot", "contre_boss"], ["state"],
+			["wait", 1.0], ["state"], ["shot", "boss_chute"], ["slow"], ["wait", 0.1], ["shot", "ralenti_bord"], ["report"]]
+		_next()
 		return
 	if OS.get_environment("ABY_TEST") == "close":
 		steps = [["wait", 1.0], ["shot", "gros_plan_repos"], ["face"], ["wait", 0.3], ["shot", "gros_plan_face"],
@@ -104,6 +118,13 @@ func _next() -> void:
 		"unface":
 			G.cam_rig.rotation.y = 0.0
 			_next()
+		"slow":
+			G.slowmo(0.3, 3000)
+			G.callout.emit("Contre parfait !", Color(1.0, 0.85, 0.35))
+			_next()
+		"state":
+			if is_instance_valid(_last_e): print("TEST etat ", _last_e.kind, " = ", _last_e.state_name(), " hp=", int(_last_e.hp), " dist=", snappedf(_last_e.global_position.distance_to(_p().global_position), 0.1))
+			_next()
 		"equip":
 			G.equip(s[1])
 			_next()
@@ -131,6 +152,7 @@ func _next() -> void:
 		"report":
 			print("TEST sentinelle ", G.sentinel.summary())
 			print("TEST equipement ", G.equipped)
+			print("TEST stats ", G.stats)
 			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
 			for e in G.enemies: print("TEST enemy ", e.kind, " etat=", e.state_name(), " hp=", int(e.hp))
 			_next()
@@ -171,6 +193,25 @@ func _process(delta: float) -> void:
 			p.attack_held = true
 			if _t >= s[1]:
 				p.attack_held = false
+				_next()
+		"parry", "roll":
+			# attend que le coup ennemi soit à « s[1] » secondes de partir, puis contre (ou roule)
+			for e in G.enemies:
+				var w: float = e.counter_window()
+				if w >= 0.0 and w <= s[1] and e.global_position.distance_to(p.global_position) < 8.0:
+					if _mode == "parry":
+						print("TEST contre fenetre=", snappedf(w, 0.01), " ok=", p.try_counter(), " ", e.kind)
+						_last_e = e
+					else:
+						for k in p.skills.size():
+							if p.skills[k]["id"] == "roulade":
+								p.move_input = Vector2(1, 0)
+								print("TEST roulade fenetre=", snappedf(w, 0.01), " ok=", p.try_skill(k))
+								p.move_input = Vector2.ZERO
+					_next()
+					return
+			if _t > 10.0:
+				print("TEST ", _mode, " timeout")
 				_next()
 		"craftwait":
 			if G.hud.get_child(0)._craft_t <= 0.0 and _t > 0.2: _next()
