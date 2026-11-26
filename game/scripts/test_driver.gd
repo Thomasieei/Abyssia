@@ -13,6 +13,13 @@ var _fps_n := 0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	DirAccess.make_dir_recursive_absolute("/tmp/shots")
+	if OS.get_environment("ABY_TEST") == "perf":
+		steps = [["wait", 4.0], ["report"], ["walk", Vector3(0.5, 0, 34)], ["walk", Vector3(-3, 0, 18)], ["wait", 4.0], ["report"]]
+		_next()
+		return
+	if OS.get_environment("ABY_TEST") == "carte":
+		_render_map()
+		return
 	if OS.get_environment("ABY_TEST") == "close":
 		steps = [["wait", 1.0], ["shot", "gros_plan_repos"],
 			]
@@ -22,9 +29,9 @@ func _ready() -> void:
 		["wait", 1.5], ["shot", "bourg"],
 		["walk", Vector3(-3.5, 0, 62.5)], ["walk", Vector3(-5.6, 0, 58)], ["wait", 0.3], ["shot", "poste_tisser"],
 		["give"], ["panel", 0], ["shot", "panneau_tisser"],
-		["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["act", 0], ["wait", 1.5], ["shot", "tissu_fait"], ["close"],
+		["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["shot", "tissu_fait"], ["close"],
 		["walk", Vector3(4.6, 0, 61.5)], ["walk", Vector3(5.6, 0, 60)], ["panel", 1], ["shot", "panneau_forge"],
-		["actid", "plastron_cendre"], ["wait", 2.1], ["actid", "bottes_rodeur"], ["wait", 2.0], ["shot", "forge_faite"], ["close"],
+		["actid", "plastron_cendre"], ["craftwait"], ["actid", "bottes_rodeur"], ["craftwait"], ["shot", "forge_faite"], ["close"],
 		["wait", 0.3], ["shot", "nouveaux_sorts"],
 		["walk", Vector3(0, 0, 52.5)], ["panel", 2], ["shot", "panneau_marche"], ["act", 0], ["wait", 0.3], ["close"],
 		["walk", Vector3(0.3, 0, 45)], ["shot", "sortie_bourg"], ["walk", Vector3(0.5, 0, 34)],
@@ -90,6 +97,7 @@ func _next() -> void:
 			await _shot(s[1])
 			_next()
 		"report":
+			print("TEST sentinelle ", G.sentinel.summary())
 			print("TEST equipement ", G.equipped)
 			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
 			for e in G.enemies: print("TEST enemy ", e.kind, " etat=", e.state_name(), " hp=", int(e.hp))
@@ -101,10 +109,11 @@ func _shot(name: String) -> void:
 	_shot_n += 1
 	var path := "/tmp/shots/%02d_%s.png" % [_shot_n, name]
 	img.save_png(path)
+	G.sentinel.check_image(img, name)
 	print("SHOT ", path)
 
 func _process(delta: float) -> void:
-	var real := delta / maxf(Engine.time_scale, 0.01)
+	var real: float = G.real_dt
 	_frames += 1
 	if _frames > 30:
 		_fps_acc += 1.0 / maxf(real, 0.0001)
@@ -131,6 +140,8 @@ func _process(delta: float) -> void:
 			if _t >= s[1]:
 				p.attack_held = false
 				_next()
+		"craftwait":
+			if G.hud.get_child(0)._craft_t <= 0.0 and _t > 0.2: _next()
 		"wait_tele":
 			p.attack_held = true
 			var found := false
@@ -150,3 +161,32 @@ func _process(delta: float) -> void:
 				p.attack_held = false
 				print("TEST fight end t=", snappedf(_t, 0.1))
 				_next()
+
+## Vue du dessus de toute la carte (caméra orthographique dans un rendu séparé).
+func _render_map() -> void:
+	await get_tree().create_timer(1.0).timeout
+	var half: float = G.world.HALF
+	var zmax: float = G.world.Z_MAX
+	var w := 1000
+	var h := int(w * (zmax + half) / (2.0 * half))
+	var sv := SubViewport.new()
+	sv.size = Vector2i(w, h)
+	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(sv)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = zmax + half
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	cam.near = 1.0
+	cam.far = 200.0
+	sv.add_child(cam)
+	cam.global_transform = Transform3D(Basis.from_euler(Vector3(-PI * 0.5, 0, 0)), Vector3(0, 80, (zmax - half) * 0.5))
+	cam.current = true
+	for i in 4: await RenderingServer.frame_post_draw
+	var img := sv.get_texture().get_image()
+	DirAccess.make_dir_recursive_absolute("/tmp/shots")
+	img.save_png("/tmp/shots/carte_vue_dessus.png")
+	print("SHOT /tmp/shots/carte_vue_dessus.png")
+	await get_tree().create_timer(3.0).timeout   # laisse la sentinelle faire son premier contrôle
+	print("TEST sentinelle ", G.sentinel.summary())
+	get_tree().quit()

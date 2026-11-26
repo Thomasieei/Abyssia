@@ -47,7 +47,11 @@ jobs:
       - name: Tests joués en jeu (captures)
         run: |
           mkdir -p /tmp/shots
-          ABY_TEST=proto timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path game --rendering-driver opengl3 --resolution 1280x720 2>&1 | grep -E "SHOT|SCRIPT|TEST" || true
+          ABY_TEST=carte timeout 120 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path game --rendering-driver opengl3 --resolution 1280x720 2>&1 | grep -E "SHOT|SCRIPT|TEST|SENTINELLE" | tee /tmp/rapport_carte.txt || true
+          ABY_TEST=proto timeout 600 xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path game --rendering-driver opengl3 --resolution 1280x720 2>&1 | grep -E "SHOT|SCRIPT|TEST|SENTINELLE" | tee /tmp/rapport_partie.txt || true
+          mkdir -p /tmp/shots && cp /tmp/rapport_*.txt /tmp/shots/ || true
+          echo "## Rapport de la sentinelle" >> $GITHUB_STEP_SUMMARY
+          grep -hE "SENTINELLE|TEST (sentinelle|report)" /tmp/rapport_*.txt >> $GITHUB_STEP_SUMMARY || true
       - uses: actions/upload-artifact@v4
         with: { name: captures, path: /tmp/shots }
       - uses: actions/setup-java@v4

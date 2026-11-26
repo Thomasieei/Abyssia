@@ -64,6 +64,9 @@ void fragment() {
 		stone = mix(stone * 0.55, stone, smoothstep(0.04, 0.12, e));
 		col = mix(col, stone, paved);
 	}
+	// ombres de nuages qui glissent lentement sur le sol
+	float cl = texture(noise_tex, p * 0.012 + TIME * vec2(0.010, 0.005)).r;
+	col *= mix(1.0, 0.8, smoothstep(0.52, 0.7, cl));
 	ALBEDO = col;
 	ROUGHNESS = 1.0;
 }

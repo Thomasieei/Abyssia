@@ -22,6 +22,7 @@ func _ready() -> void:
 	_bush = load("res://assets/nature/Bush_Common_Flowers.gltf").instantiate()
 	_bush.scale = _base_scale
 	add_child(_bush)
+	G.world._wind_small(_bush, 0.05, 1.2)
 	# anneau discret au sol : « on peut récolter ici »
 	_marker = MeshInstance3D.new()
 	var pm := PlaneMesh.new()

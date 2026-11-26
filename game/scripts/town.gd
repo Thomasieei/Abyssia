@@ -101,6 +101,8 @@ func _house(h: Dictionary) -> void:
 	if h.has("chimney"):
 		var ch: Vector2 = h.chimney
 		_put("Prop_Chimney", Vector3(ch.x, 2.9, ch.y), 0, root)
+	var ext := Vector2(w * 0.5, 4.0) if absi(int(h.yaw)) % 180 == 0 else Vector2(4.0, w * 0.5)
+	G.house_boxes.append(Rect2(Vector2(h.pos.x, h.pos.z) - ext, ext * 2.0))
 	main._dither_tree(root, 8.5, 11.5)   # toits et murs s'effacent seulement s'ils cachent le héros
 	# collision : un bloc par maison
 	var body := StaticBody3D.new()

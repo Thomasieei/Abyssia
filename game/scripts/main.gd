@@ -96,7 +96,40 @@ var cam: Camera3D
 var rig: Node3D
 var player: CharacterBody3D
 var _mm_cache := {}
-var _dither_mats := {}          # matériau d'origine -> copie qui s'efface près de la caméra
+var _dither_mats := {}
+var _wind_mats := {}
+var cloud_tex: NoiseTexture2D
+const FOLIAGE := preload("res://scripts/foliage.gdshader")
+
+## Remplace un matériau de feuillage par la version « vent » (mise en cache, partagée).
+func wind_mat(src: StandardMaterial3D, sway: float, sway_h: float, dmin := 0.0, dmax := 0.0) -> Material:
+	if OS.get_environment("ABY_NOWIND") != "": return src
+	var key := [src, sway, sway_h, dmin]
+	if _wind_mats.has(key): return _wind_mats[key]
+	var m := ShaderMaterial.new()
+	m.shader = FOLIAGE
+	m.set_shader_parameter("albedo_tex", src.albedo_texture)
+	m.set_shader_parameter("albedo", src.albedo_color)
+	m.set_shader_parameter("scissor", 0.5 if src.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED else 0.0)
+	m.set_shader_parameter("sway", sway)
+	m.set_shader_parameter("sway_h", sway_h)
+	m.set_shader_parameter("fade_min", dmin)
+	m.set_shader_parameter("fade_max", dmax)
+	m.set_shader_parameter("cloud_tex", cloud_tex)
+	_wind_mats[key] = m
+	return m
+
+func _is_foliage(src: Material) -> bool:
+	var n := src.resource_name
+	return "Leaves" in n or "Grass" in n or "Flowers" in n or "Leaf" in n
+
+## Petite végétation (buissons, fougères, fleurs) : vent sans tramage.
+func _wind_small(n: Node3D, sway: float, h: float) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		for si in mi.mesh.get_surface_count():
+			var src: Material = mi.mesh.surface_get_material(si)
+			if src is StandardMaterial3D and _is_foliage(src):
+				mi.set_surface_override_material(si, wind_mat(src, sway, h))          # matériau d'origine -> copie qui s'efface près de la caméra
 
 func _ready() -> void:
 	G.world = self
@@ -115,10 +148,15 @@ func _ready() -> void:
 		g.setup(Vector3(f[0], 0, f[1]), deg_to_rad(f[2]), f[3])
 		add_child(g)
 		G.gather_nodes.append(g)
+	var fauna: Node = load("res://scripts/fauna.gd").new()
+	add_child(fauna)
 	_spawn_player()
 	_spawn_monsters()
 	_build_camera()
 	_build_hud()
+	G.warmup(player.global_position)
+	G.sentinel = load("res://scripts/sentinel.gd").new()
+	add_child(G.sentinel)
 	if OS.get_environment("ABY_TEST") != "":
 		var td: Node = load("res://scripts/test_driver.gd").new()
 		add_child(td)
@@ -180,6 +218,7 @@ func _build_ground() -> void:
 	fn.fractal_octaves = 3
 	nt.noise = fn
 	mat.set_shader_parameter("noise_tex", nt)
+	cloud_tex = nt
 	var segs := PackedVector4Array()
 	var ws := PackedFloat32Array()
 	for s in PATHS:
@@ -193,6 +232,7 @@ func _build_ground() -> void:
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(m)
 	var body := StaticBody3D.new()
+	body.name = "Sol"
 	var cs := CollisionShape3D.new()
 	cs.shape = WorldBoundaryShape3D.new()
 	body.add_child(cs)
@@ -219,8 +259,11 @@ func _place(path: String, d: Array) -> void:
 	n.rotation.y = deg_to_rad(d[3])
 	n.scale = Vector3.ONE * d[4]
 	add_child(n)
+	G.decor.append({"node": n, "name": d[0], "r": d[5] * d[4]})
 	if "Tree" in path or "Pine" in path:
 		_dither_tree(n)
+	elif "Bush" in path or "Fern" in path or "Flower" in path or "Plant" in path or "Mushroom" in path:
+		_wind_small(n, 0.05, 1.2)
 	elif "Rock_" in path:
 		_tint(n, Color(0.66, 0.63, 0.58))
 	if d[5] > 0.0:
@@ -242,6 +285,11 @@ func _dither_tree(n: Node3D, dmin := 9.0, dmax := 13.0) -> void:
 		for si in mi.mesh.get_surface_count():
 			var src: Material = mi.mesh.surface_get_material(si)
 			if not (src is StandardMaterial3D): continue
+			if _is_foliage(src):
+				var tree_h := 6.0 if not "Bush" in src.resource_name else 1.5
+				if mi.get_aabb().size.y < 3.0: tree_h = 2.5
+				mi.set_surface_override_material(si, wind_mat(src, 0.07, tree_h, dmin, dmax))
+				continue
 			var key := [src, dmin]
 			if not _dither_mats.has(key):
 				var m: StandardMaterial3D = src.duplicate()
@@ -339,6 +387,8 @@ func _build_grass() -> void:
 		for i in xf[k].size(): mm.set_instance_transform(i, xf[k][i])
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
+		var gsrc: Material = mi.mesh.surface_get_material(0)
+		if gsrc is StandardMaterial3D: mmi.material_override = wind_mat(gsrc, 0.12, 0.8)
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mmi)
 		src.free()
@@ -389,7 +439,7 @@ func _build_camera() -> void:
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(player): return
-	var real := delta / maxf(Engine.time_scale, 0.01)
+	var real: float = G.real_dt
 	# la caméra anticipe un peu la direction du mouvement
 	var lead: Vector3 = player.velocity * 0.18
 	lead.y = 0

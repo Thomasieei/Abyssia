@@ -235,7 +235,7 @@ func _process(delta: float) -> void:
 				if G.craft(_craft_r):
 					Sfx.play("loot", -2.0)
 					G.burst(player.global_position + Vector3.UP * 1.5, "star_06", Color(1, 0.9, 0.5), 14, 3.0, 0.4, 0.6, -2.0)
-	_fps = lerpf(_fps, 1.0 / maxf(delta / maxf(Engine.time_scale, 0.01), 0.001), 0.05)
+	_fps = lerpf(_fps, 1.0 / maxf(G.real_dt, 0.001), 0.05)
 	for i in _flash.size(): _flash[i] = move_toward(_flash[i], 0.0, delta * 3.0)
 	for t in _toasts: t[2] -= delta
 	_toasts = _toasts.filter(func(t): return t[2] > 0.0)

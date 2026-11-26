@@ -12,6 +12,9 @@ var hud: CanvasLayer
 var enemies: Array = []
 var gather_nodes: Array = []
 var stations: Array = []
+var decor: Array = []         # {node, name, r} : tout le décor posé (pour la sentinelle)
+var house_boxes: Array = []   # Rect2 au sol de chaque maison
+var sentinel: Node
 
 var silver := 0
 var inventory := {}  # id -> quantité
@@ -98,7 +101,13 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_tele_shader = load("res://scripts/telegraph.gdshader")
 
+var real_dt := 0.016         # durée réelle de la dernière image (indépendante du micro-gel)
+var _last_us := 0
+
 func _process(_d: float) -> void:
+	var now := Time.get_ticks_usec()
+	if _last_us > 0: real_dt = clampf((now - _last_us) / 1000000.0, 0.0, 0.25)
+	_last_us = now
 	if _stop_until > 0 and Time.get_ticks_msec() >= _stop_until:
 		_stop_until = 0
 		Engine.time_scale = 1.0
@@ -330,3 +339,18 @@ func ground_quad(parent: Node3D, texname: String, color: Color, size: float) -> 
 	m.visible = false
 	parent.add_child(m)
 	return m
+
+## Préchauffage : chaque effet est dessiné une fois sous le sol au chargement, pour que le
+## téléphone compile ses shaders tout de suite (sinon micro-gel au premier sort lancé).
+func warmup(at: Vector3) -> void:
+	var p := at + Vector3.DOWN * 2.5
+	for t in ["spark_04", "spark_05", "smoke_04", "dirt_02", "star_06", "light_01", "flame_04", "circle_05"]:
+		burst(p, t, Color.WHITE, 1, 0.1, 0.3, 0.3, 0.0)
+	slash(p, 0.0, Color.WHITE)
+	ring(p, "magic_03", Color.WHITE, 1.0, 1.1, 0.3)
+	streak(p, 0.0, Color.WHITE, 0.0)
+	number(p, 1, Color.WHITE)
+	for sh in 3:
+		var tl := telegraph(p, 0.0, sh, Vector2(2, 2), Color.WHITE)
+		tl.global_position.y = p.y
+		get_tree().create_timer(0.3, false).timeout.connect(tl.queue_free)
