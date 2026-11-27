@@ -79,6 +79,7 @@ const STATIONS := [
 	{"id": "tisserand", "label": "Tisser", "title": "Atelier du tisserand", "pos": Vector3(-6.3, 0, 58)},
 	{"id": "forge", "label": "Forger", "title": "Forge de Brumefeuille", "pos": Vector3(6.3, 0, 60)},
 	{"id": "marche", "label": "Vendre", "title": "Marché du bourg", "pos": Vector3(0, 0, 51.5)},
+	{"id": "statut", "label": "Statut", "title": "Registre d'Aldric", "pos": Vector3(-2.4, 0, 64.7)},
 ]
 
 ## Habitants : chacun posé à la main, avec sa routine et ses phrases.
@@ -106,7 +107,9 @@ const VILLAGERS := [
 	{"name": "Aldric", "pos": Vector3(-3.7, 0, 63.0), "dir": 215.0, "seated": true,
 		"look": {"outfit": PM, "texture": T2, "beard": true, "hair_color": Color(0.82, 0.8, 0.76), "skin": Color(0.95, 0.86, 0.8)},
 		"seq": [["Sitting_Idle", 6.0], ["Sitting_Nodding", 3.0], ["Sitting_Talking", 4.0]],
-		"lines": ["Méfie-toi de la crête au nord, petit.", "De mon temps, on chassait les brutes à mains nues."]},
+		"lines": ["Méfie-toi de la crête au nord, petit.", "De mon temps, on chassait les brutes à mains nues."],
+		"on_pending": "Assieds-toi, petit. Je vais inscrire tes exploits au registre.",
+		"on_update": ["Voilà. Ton corps se souvient de ce que tu as fait.", "Hm… ça, c'est une vraie technique. Elle est née de tes combats.", "Par les dieux… Niveau 2. Tu n'es plus un débutant."]},
 	{"name": "Jehan", "pos": Vector3(-1.5, 0, 53.5),
 		"look": {"outfit": PM, "hair": "res://assets/hero/Hair_SimpleParted.gltf", "hair_color": Color(0.3, 0.2, 0.1)},
 		"route": [Vector3(-1.5, 0, 53.5), Vector3(-3.0, 0, 58.0), Vector3(-1.6, 0, 66.0), Vector3(1.6, 0, 66.0), Vector3(3.0, 0, 58.2), Vector3(1.6, 0, 53.5)],

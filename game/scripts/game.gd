@@ -7,6 +7,11 @@ signal target_changed(t)
 signal announce(msg: String)
 signal callout(msg: String, color: Color)   # « Contre parfait ! », « Esquive parfaite ! »
 signal boss_defeated(boss)
+signal status_changed
+
+const Status := preload("res://scripts/status.gd")
+var status   # statut de l'aventurier (status.gd)
+var _save_t := 30.0
 
 var world: Node3D
 var player: Node3D
@@ -107,12 +112,22 @@ var _tex_cache := {}
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_tele_shader = load("res://scripts/telegraph.gdshader")
+	status = Status.new()
+	status.load_saved()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if status: status.save()
 
 var real_dt := 0.016         # durée réelle de la dernière image (indépendante du micro-gel)
 var _last_us := 0
 
 func _process(_d: float) -> void:
 	_pulse_lava()
+	_save_t -= _d
+	if _save_t <= 0.0:
+		_save_t = 30.0
+		status.save()
 	var now := Time.get_ticks_usec()
 	if _last_us > 0: real_dt = clampf((now - _last_us) / 1000000.0, 0.0, 0.25)
 	_last_us = now
@@ -184,7 +199,7 @@ func slowmo_left() -> float:
 
 ## Ce que le joueur fait vraiment (servira à la progression par le jeu).
 var tip_contre := false
-var stats := {"contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0, "kills": {}, "gardien": false}
+var stats := {"contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0, "survies": 0, "kills": {}, "gardien": false}
 
 func shake(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)

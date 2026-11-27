@@ -45,6 +45,10 @@ var _panel_title := ""
 var _craft_t := 0.0        # fabrication en cours
 var _craft_r: Dictionary = {}
 var _panel_btns := []      # [Rect2, action]
+var _upd := {}             # animation de la mise à jour de statut {t, from, to, techs, level_up}
+var _news := false         # des exploits attendent d'être inscrits (vérifié deux fois par seconde)
+var _news_t := 0.0
+const Status := preload("res://scripts/status.gd")
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -164,14 +168,15 @@ func nearest_station() -> Dictionary:
 
 func open_panel(st: Dictionary) -> void:
 	panel = st.id
+	_upd = {}
 	_panel_title = st.title
 	_craft_t = 0.0
 	player.attack_held = false
 	Sfx.play("ui", -6.0)
 
 func _panel_rect() -> Rect2:
-	var w := 660.0
-	var h := 500.0
+	var w := 720.0 if panel == "statut" else 660.0
+	var h := 600.0 if panel == "statut" else 500.0
 	return Rect2((size.x - w) * 0.5, (size.y - h) * 0.5 - 10, w, h)
 
 ## Lignes du panneau : [titre, détail, couleur, libellé du bouton, actif, action]
@@ -247,9 +252,37 @@ func do_action(a: Array) -> void:
 			Sfx.play("pickup", -4.0)
 		"sell":
 			if G.sell_all(a[1]) > 0: Sfx.play("loot", -4.0)
+		"status_update":
+			if not _upd.is_empty() and _upd.t < 2.0: return
+			if not G.status.has_news(): return
+			_upd = G.status.update()
+			_upd["t"] = 0.0
+			_upd["done"] = false
+			G.status.save()
+			Sfx.play("gather", -2.0, 0.8)
+			var al = load("res://scripts/villager.gd").by_name.get("Aldric")
+			if al:
+				var lines: Array = al.cfg.on_update
+				al.react("Sitting_Talking", lines[2] if _upd.level_up else (lines[1] if not _upd.techs.is_empty() else lines[0]))
 
 func _process(delta: float) -> void:
 	size = get_viewport_rect().size
+	_news_t -= delta
+	if _news_t <= 0.0:
+		_news_t = 0.5
+		_news = G.status.has_news() and (G.status.pending_total() >= 5 or not G.status.ready_techs().is_empty())
+	if not _upd.is_empty():
+		_upd.t += G.real_dt   # indépendant du ralenti et du micro-gel
+		if _upd.t >= 1.3 and not _upd.done:
+			_upd.done = true
+			Sfx.play("loot", -2.0)
+			G.burst(player.global_position + Vector3.UP * 1.6, "star_06", Color(1, 0.9, 0.55), 22, 3.5, 0.45, 0.8, -1.0)
+			for id in _upd.techs: _toasts.push_front(["Technique : %s" % Status.TECHS[id].name, Color(1, 0.85, 0.45), 4.0])
+			if _upd.level_up:
+				_toasts.push_front(["Niveau %d atteint" % G.status.level, Color(1, 0.8, 0.4), 5.0])
+				G.ring(player.global_position, "magic_03", Color(1.0, 0.85, 0.45, 0.95), 1.0, 9.0, 0.9)
+				G.burst(player.global_position + Vector3.UP, "light_01", Color(1, 0.9, 0.6), 30, 4.0, 0.7, 1.2, 2.0)
+				Sfx.play("hit_heavy", -2.0, 0.6)
 	if panel != "":
 		if nearest_station().is_empty(): panel = ""
 		if _craft_t > 0.0:
@@ -347,6 +380,7 @@ func _draw() -> void:
 	_draw_enemy_bars()
 	_draw_gather_bar()
 	_draw_player_frame()
+	_draw_news()
 	_draw_target_frame()
 	_draw_boss()
 	_draw_minimap()
@@ -392,6 +426,21 @@ func _draw_player_frame() -> void:
 		draw_arc(bc, 14, 0, TAU, 24, Color(0.8, 0.7, 0.5), 2.0, true)
 		_txt(bc + Vector2(-14, 28), "%.0f" % ceil(left), 11, Color(1, 1, 1), 28, HORIZONTAL_ALIGNMENT_CENTER)
 		x += 34
+
+## Des exploits attendent : petit rappel sous le portrait (qui pulse doucement).
+func _draw_news() -> void:
+	if not _news or panel == "statut": return
+	var a := 0.75 + 0.25 * sin(Time.get_ticks_msec() / 260.0)
+	var r := Rect2(48, 132, 226, 26)
+	_panel(r, Color(0.16, 0.11, 0.05, 0.82 * a), 13)
+	draw_circle(r.position + Vector2(14, 13), 8, Color(1, 0.82, 0.4, a))
+	_icon_book(r.position + Vector2(14, 13), 6.0, Color(0.25, 0.15, 0.05))
+	_txt(r.position + Vector2(28, 18), "Exploits à inscrire — Aldric, au bourg", 12, Color(1, 0.9, 0.65, a))
+
+func _icon_book(c: Vector2, s: float, col: Color) -> void:
+	draw_rect(Rect2(c + Vector2(-0.95, -0.7) * s, Vector2(0.88, 1.4) * s), col)
+	draw_rect(Rect2(c + Vector2(0.07, -0.7) * s, Vector2(0.88, 1.4) * s), col)
+	draw_line(c + Vector2(0, -0.75) * s, c + Vector2(0, 0.75) * s, col.lightened(0.6), maxf(s * 0.14, 1.0))
 
 func _draw_target_frame() -> void:
 	if _target == null or not is_instance_valid(_target) or _target.dead: return
@@ -528,7 +577,8 @@ func _draw_hub() -> void:
 		var gr: float = lay["gather"][1] * (1.0 + sin(t * 5.0) * 0.04)
 		_bezel(gc, gr, 0.3 + 0.3 * sin(t * 5.0), true)
 		_orb(gc, gr, Color(0.95, 0.75, 0.35), "star_06")
-		_icon_hammer(gc, gr * 0.5, Color(1, 0.97, 0.88))
+		if stn.id == "statut": _icon_book(gc, gr * 0.42, Color(1, 0.97, 0.88))
+		else: _icon_hammer(gc, gr * 0.5, Color(1, 0.97, 0.88))
 		_txt(gc + Vector2(-60, gr + 24), stn.label, 14, Color(1, 0.92, 0.7), 120, HORIZONTAL_ALIGNMENT_CENTER)
 	elif player.nearest_gather() != null and player.gather_progress() < 0.0:
 		var gc: Vector2 = lay["gather"][0]
@@ -656,6 +706,9 @@ func _icon_hammer(c: Vector2, s: float, col: Color) -> void:
 func _draw_panel() -> void:
 	_panel_btns.clear()
 	if panel == "": return
+	if panel == "statut":
+		_draw_status()
+		return
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
 	var r := _panel_rect()
 	_panel(r, Color(0.1, 0.085, 0.07, 0.96), 10)
@@ -711,3 +764,118 @@ func _draw_boss() -> void:
 	if _announce[1] > 0.0:
 		var a := clampf(_announce[1] / 0.5, 0.0, 1.0)
 		_txt(Vector2(0, size.y * 0.32), _announce[0], 30, Color(1, 0.8, 0.5, a), size.x, HORIZONTAL_ALIGNMENT_CENTER)
+
+# --- Registre d'Aldric : la feuille de statut ---------------------------------------
+func _ease(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return 1.0 - pow(1.0 - x, 3.0)
+
+func _draw_status() -> void:
+	var S = G.status
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.4))
+	var r := _panel_rect()
+	_panel(r, Color(0.1, 0.085, 0.07, 0.97), 10)
+	# parchemin intérieur
+	var pr := Rect2(r.position + Vector2(14, 62), r.size - Vector2(28, 76))
+	draw_style_box(_sb(Color(0.2, 0.16, 0.11, 0.9), 6), pr)
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 52)), Color(0.22, 0.16, 0.1, 0.95))
+	_txt(r.position + Vector2(22, 35), _panel_title, 22, Color(1, 0.9, 0.7))
+	var up: bool = not _upd.is_empty()
+	var k: float = _ease((_upd.t - 0.15) / 1.0) if up else 1.0
+	var show_lvl: int = S.level
+	if up and _upd.level_up and _upd.t < 1.3: show_lvl = S.level - 1
+	_txt(r.position + Vector2(r.size.x - 260, 35), "Niveau %d" % show_lvl, 22, Color(1, 0.82, 0.4), 200, HORIZONTAL_ALIGNMENT_RIGHT)
+	var xb := Rect2(r.position + Vector2(r.size.x - 52, 8), Vector2(40, 36))
+	draw_rect(xb, Color(0.45, 0.15, 0.12))
+	_txt(xb.position + Vector2(0, 27), "X", 20, Color(1, 1, 1), 40, HORIZONTAL_ALIGNMENT_CENTER)
+	_panel_btns.append([xb, ["close"]])
+	_txt(pr.position + Vector2(18, 24), "Ce que tu as vraiment fait, inscrit dans ton corps.", 13, Color(0.85, 0.78, 0.65))
+	if show_lvl > 1:
+		_txt(pr.position + Vector2(pr.size.x - 330, 24), "Les aptitudes des niveaux passés restent acquises.", 12, Color(1, 0.8, 0.45), 312, HORIZONTAL_ALIGNMENT_RIGHT)
+	# aptitudes
+	var y := pr.position.y + 40
+	for a in Status.ABIL:
+		var col: Color = Status.COLORS[a]
+		var v: float
+		var pend: float
+		if up and not (_upd.level_up and _upd.t >= 1.3):
+			v = lerpf(_upd.from[a], _upd.to[a], k)
+			pend = (_upd.to[a] - _upd.from[a]) * (1.0 - k)
+		else:
+			v = S.val[a]
+			pend = S.pending[a]
+		var row := Rect2(pr.position.x + 10, y, pr.size.x - 20, 46)
+		draw_rect(row, Color(1, 1, 1, 0.04))
+		draw_circle(row.position + Vector2(20, 23), 11, col.darkened(0.55))
+		draw_circle(row.position + Vector2(20, 22), 8, col)
+		_txt(row.position + Vector2(40, 21), Status.NAMES[a], 16, Color(1, 0.95, 0.86))
+		_txt(row.position + Vector2(40, 38), Status.WHAT[a], 11, Color(0.72, 0.68, 0.6))
+		var g: String = Status.grade(int(v))
+		# rang : lettre dans un médaillon (le « I » seul se lirait comme un trait)
+		var bc := row.position + Vector2(190, 23)
+		var pulse := 0.0
+		if up and _upd.t < 1.3 and (_upd.to[a] - _upd.from[a]) > 0: pulse = 0.5 + 0.5 * sin(_upd.t * 14.0)
+		draw_circle(bc, 18, Color(0, 0, 0, 0.5))
+		draw_circle(bc, 16, col.darkened(0.7))
+		draw_arc(bc, 16, 0, TAU, 32, col.lerp(Color(1, 1, 1), pulse * 0.6), 2.0 + pulse * 2.0, true)
+		_txt(bc + Vector2(-20, 8), g, 22, col.lightened(0.35), 40, HORIZONTAL_ALIGNMENT_CENTER)
+		_txt(row.position + Vector2(214, 31), "%d" % int(v), 18, Color(1, 1, 1), 54, HORIZONTAL_ALIGNMENT_RIGHT)
+		var bar := Rect2(row.position.x + 290, row.position.y + 18, 290, 11)
+		draw_rect(bar, Color(0, 0, 0, 0.55))
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * v / 999.0, bar.size.y)), col)
+		if pend >= 1.0:
+			draw_rect(Rect2(bar.position + Vector2(bar.size.x * v / 999.0, 0), Vector2(maxf(bar.size.x * pend / 999.0, 2.0), bar.size.y)), Color(col.lightened(0.5), 0.55))
+		for gi in range(1, 10):
+			draw_line(bar.position + Vector2(bar.size.x * gi / 10.0, 0), bar.position + Vector2(bar.size.x * gi / 10.0, bar.size.y), Color(0, 0, 0, 0.5), 1.0)
+		draw_rect(bar, Color(0, 0, 0, 0.8), false, 1.0)
+		if pend >= 1.0:
+			_txt(Vector2(bar.end.x + 12, row.position.y + 29), "+%d" % int(pend), 16, Color(0.6, 1.0, 0.5))
+		y += 50
+	# techniques
+	y += 26
+	_txt(Vector2(pr.position.x + 18, y + 4), "Techniques", 17, Color(1, 0.85, 0.5))
+	y += 14
+	var i := 0
+	for id in Status.TECHS:
+		var t: Dictionary = Status.TECHS[id]
+		var cell := Rect2(pr.position.x + 10 + (i % 2) * ((pr.size.x - 20) * 0.5), y + (i / 2) * 66, (pr.size.x - 20) * 0.5 - 6, 60)
+		var learned: bool = S.has(id)
+		var fresh: bool = up and _upd.techs.has(id)
+		if fresh and _upd.t < 1.3: learned = false
+		var glow := 0.0
+		if fresh and _upd.t >= 1.3: glow = clampf(1.0 - (_upd.t - 1.3) / 2.5, 0.0, 1.0)
+		draw_style_box(_sb(Color(0.32, 0.22, 0.1, 0.75) if learned else Color(0, 0, 0, 0.25), 6), cell)
+		if glow > 0.0: draw_rect(cell.grow(2), Color(1, 0.85, 0.4, glow), false, 3.0)
+		if learned:
+			_txt(cell.position + Vector2(12, 21), t.name, 15, Color(1, 0.88, 0.5))
+			draw_multiline_string(font, cell.position + Vector2(12, 38), t.desc, HORIZONTAL_ALIGNMENT_LEFT, cell.size.x - 22, 11, 2, Color(0.9, 0.86, 0.78))
+		else:
+			var have: int = mini(G.stats.get(t.stat, 0), t.n)
+			_txt(cell.position + Vector2(12, 21), "? ? ?", 15, Color(0.6, 0.58, 0.55))
+			_txt(cell.position + Vector2(cell.size.x - 60, 21), "%d / %d" % [have, t.n], 13, Color(0.6, 1.0, 0.5) if have >= t.n else Color(0.65, 0.62, 0.58), 48, HORIZONTAL_ALIGNMENT_RIGHT)
+			draw_multiline_string(font, cell.position + Vector2(12, 38), t.hint, HORIZONTAL_ALIGNMENT_LEFT, cell.size.x - 22, 11, 2, Color(0.7, 0.67, 0.62))
+		i += 1
+	# sceau du niveau supérieur : il tombe sur la feuille, puis s'efface
+	if up and _upd.level_up and _upd.t >= 1.3 and _upd.t < 4.5:
+		var lt: float = _upd.t - 1.3
+		var sc := 1.0 + 1.2 * maxf(0.0, 1.0 - lt / 0.18)
+		var al := clampf((4.5 - _upd.t) / 0.8, 0.0, 1.0)
+		var c := Vector2(pr.position.x + pr.size.x * 0.5, pr.position.y + 160)
+		draw_set_transform(c, -0.08, Vector2.ONE * sc)
+		draw_style_box(_sb(Color(0.35, 0.08, 0.05, 0.92 * al), 10), Rect2(-170, -48, 340, 96))
+		draw_rect(Rect2(-162, -40, 324, 80), Color(1, 0.8, 0.4, 0.9 * al), false, 3.0)
+		_txt(Vector2(-170, 6), "NIVEAU %d" % S.level, 40, Color(1, 0.86, 0.5, al), 340, HORIZONTAL_ALIGNMENT_CENTER)
+		_txt(Vector2(-170, 32), "Le Gardien de cendre a forgé ton rang.", 13, Color(1, 0.9, 0.75, al), 340, HORIZONTAL_ALIGNMENT_CENTER)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# bouton
+	var en: bool = S.has_news() and (_upd.is_empty() or _upd.t >= 2.0)
+	var bb := Rect2(r.end.x - 260, r.end.y - 56, 236, 40)
+	var hint := "Rien de nouveau à inscrire."
+	if S.can_level(): hint = "Un grand exploit : le niveau supérieur t'attend."
+	elif not S.ready_techs().is_empty(): hint = "Une technique s'éveille…"
+	elif S.has_news(): hint = "Des exploits attendent d'être inscrits."
+	_txt(Vector2(r.position.x + 28, bb.position.y + 26), hint, 13, Color(0.85, 0.8, 0.7) if en else Color(0.6, 0.58, 0.55))
+	draw_rect(bb, Color(0.45, 0.32, 0.12) if en else Color(0.22, 0.22, 0.24))
+	draw_rect(bb, Color(1.0, 0.82, 0.45, 0.8 if en else 0.2), false, 2.0)
+	_txt(bb.position + Vector2(0, 26), "Mettre à jour le statut", 15, Color(1, 1, 1) if en else Color(0.6, 0.6, 0.62), bb.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	if en: _panel_btns.append([bb, ["status_update"]])

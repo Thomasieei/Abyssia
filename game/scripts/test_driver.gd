@@ -46,6 +46,14 @@ func _ready() -> void:
 			["tp", Vector3(1.0, 0, 70.0)], ["boss_tue"], ["tp", Vector3(5.5, 0, 63.6)], ["wait", 1.0], ["shot", "rumeur_forgeron"], ["report"]]
 		_next()
 		return
+	if OS.get_environment("ABY_TEST") == "statut":
+		steps = [["wait", 1.0], ["exploits"], ["tp", Vector3(-2.4, 0, 64.9)], ["wait", 1.4], ["shot", "aldric_appelle"],
+			["panel", 3], ["wait", 0.2], ["shot", "registre_avant"], ["statup"], ["wait", 0.6], ["shot", "registre_inscription"], ["wait", 2.0], ["shot", "registre_techniques"],
+			["close"], ["grand_exploit"], ["panel", 3], ["wait", 0.2], ["shot", "niveau_pret"], ["statup"], ["wait", 0.9], ["shot", "niveau_compte"], ["wait", 1.6], ["shot", "niveau_2"], ["close"], ["wait", 0.3], ["shot", "niveau_2_bourg"],
+			["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.8], ["walk", Vector3(0.5, 0, -19.5)], ["parry", 0.09], ["callout", "Dernier instant !"], ["wait", 0.08], ["shot", "dernier_instant"],
+			["wait", 1.5], ["equip", "bottes_rodeur"], ["roll", 0.1], ["wait", 0.7], ["shot", "pas_ombre"], ["report"]]
+		_next()
+		return
 	if OS.get_environment("ABY_TEST") == "tisseuse_proche":
 		steps = [["tp", Vector3(18.0, 0, 22.0)], ["wait", 0.5], ["shot", "tisseuse_descend"], ["wait", 1.6], ["shot", "tisseuse_proche"], ["face"], ["wait", 0.2], ["shot", "tisseuse_face"]]
 		_next()
@@ -95,7 +103,10 @@ func _ready() -> void:
 		["bosshp", 0.55], ["wait", 1.2], ["shot", "boss_phase2"], ["fight", 10.0], ["shot", "boss_pluie"],
 		["bosshp", 0.2], ["wait", 1.0], ["fight", 12.0], ["shot", "boss_fureur"],
 		["bosshp", 0.01], ["fight", 4.0], ["wait", 1.0], ["shot", "boss_vaincu"],
-		["wait", 1.0], ["shot", "fin"], ["report"],
+		["wait", 1.0], ["shot", "fin"],
+		# retour au bourg : Aldric inscrit ce que la partie a vraiment donné
+		["tp", Vector3(-2.4, 0, 64.9)], ["wait", 1.2], ["shot", "retour_aldric"], ["panel", 3], ["wait", 0.2], ["shot", "registre_partie"],
+		["statup"], ["wait", 2.2], ["shot", "registre_partie_inscrit"], ["close"], ["report"],
 	]
 	_next()
 
@@ -149,6 +160,22 @@ func _next() -> void:
 					print("TEST habitant ", v.name, " cd=", snappedf(v._talk_cd, 0.1))
 					v._talk_cd = 0.0
 			_next()
+		"exploits":
+			# ce qu'une vraie sortie aurait donné (contres, esquives, chutes, coups portés et reçus, sorts)
+			G.stats.contres_parfaits = 3; G.stats.contres = 7; G.stats.esquives_parfaites = 3; G.stats.chutes = 4
+			for a in [["force", 95.0], ["endurance", 60.0], ["dexterite", 70.0], ["agilite", 48.0], ["magie", 30.0]]: G.status.gain(a[0], a[1])
+			print("TEST statut en attente ", G.status.pending)
+			_next()
+		"grand_exploit":
+			G.stats.gardien = true
+			G.stats.chutes = 6
+			G.status.gain("force", 900.0)
+			print("TEST niveau possible=", G.status.can_level())
+			_next()
+		"statup":
+			G.hud.get_child(0).do_action(["status_update"])
+			print("TEST statut niveau=", G.status.level, " val=", G.status.val, " techs=", G.status.techs.keys(), " pv_max=", _p().max_hp)
+			_next()
 		"ownequip":
 			G.owned_gear[s[1]] = true
 			G.equip(s[1])
@@ -184,6 +211,7 @@ func _next() -> void:
 			print("TEST sentinelle ", G.sentinel.summary())
 			print("TEST equipement ", G.equipped)
 			print("TEST stats ", G.stats)
+			print("TEST statut niveau=", G.status.level, " val=", G.status.val, " attente=", G.status.pending, " techs=", G.status.techs.keys())
 			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
 			for e in G.enemies: print("TEST enemy ", e.kind, " etat=", e.state_name(), " hp=", int(e.hp))
 			_next()
@@ -253,6 +281,10 @@ func _process(delta: float) -> void:
 					return
 			if _t > 14.0:
 				print("TEST pat ", s[1], " timeout")
+				_next()
+		"callout":
+			if G.hud.get_child(0)._callout[0] == s[1] or _t > 6.0:
+				if _t > 6.0: print("TEST callout timeout ", s[1])
 				_next()
 		"craftwait":
 			if G.hud.get_child(0)._craft_t <= 0.0 and _t > 0.2: _next()

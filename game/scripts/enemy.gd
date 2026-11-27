@@ -353,7 +353,7 @@ func _attack_update(delta: float) -> void:
 			if is_instance_valid(_tele):
 				_tele.material_override.set_shader_parameter("progress", 1.0 - _atk_t / _windup())
 				# signal de contre : la zone blanchit quand il est temps de parer
-				if _atk_t <= 0.32 and not _cue:
+				if _atk_t <= 0.32 + G.status.counter_bonus() and not _cue:
 					_cue = true
 					_tele.material_override.set_shader_parameter("color", Color(1.0, 0.93, 0.7, 0.95))
 					if not G.tip_contre and target == G.player:
@@ -472,6 +472,7 @@ func _stun_update(delta: float) -> void:
 func _dead_enter() -> void:
 	dead = true
 	G.stats.kills[kind] = G.stats.kills.get(kind, 0) + 1
+	G.status.gain("force", {"brute": 3.0, "rodeur": 2.0, "araignee": 2.5, "boss": 25.0}.get(kind, 0.5))
 	if kind == "boss": G.stats.gardien = true
 	if kind == "boss":
 		for a in _adds:
@@ -533,6 +534,7 @@ func _stagger_update(delta: float) -> void:
 
 # Chute : il tombe (début de l'animation de mort), reste à terre, puis se relève (la même, à l'envers)
 func _down_enter() -> void:
+	G.stats.chutes += 1
 	_down_phase = 0
 	_timer = 0.0
 	var dn: Array = data.get("down", [0.55, 1.42, 1.5])
@@ -753,6 +755,7 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 	var st := state_name()
 	if st == "Retour": dmg *= 0.25
 	hp -= dmg
+	if dmg < 9000.0: G.status.gain("force", minf(dmg, hp + dmg) / 40.0)
 	# chiffres empilés : jamais l'un sur l'autre
 	var now := Time.get_ticks_msec()
 	_num_stack = _num_stack + 1 if now - _num_t < 450 else 0
@@ -782,7 +785,7 @@ func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := fal
 		return
 	# équilibre : les coups lourds le brisent plus vite ; brisé => titubement (ou chute)
 	if st != "Chute" and st != "Titube":
-		poise -= dmg * (0.9 if heavy else 0.45) * (1.0 if knock < 3.0 else 1.6)
+		poise -= dmg * (0.9 if heavy else 0.45) * (1.0 if knock < 3.0 else 1.6) * (1.5 if G.status.has("briseur") else 1.0)
 		_poise_idle = 2.5
 		if poise <= 0.0:
 			poise = data.poise

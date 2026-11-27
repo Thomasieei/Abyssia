@@ -23,11 +23,15 @@ var _strike_done := false
 var _line_i := 0
 var _yaw_goal := 0.0
 var _said := {}
+static var by_name := {}
+static var _speaker = null    # un seul habitant parle à la fois (sinon les bulles se chevauchent)
+var _tw: Tween
 
 func setup(c: Dictionary) -> void:
 	cfg = c
 
 func _ready() -> void:
+	by_name[cfg.get("name", "")] = self
 	var p: Vector3 = cfg.pos
 	position = Vector3(p.x, G.world.h(p.x, p.z), p.z)
 	_yaw_goal = deg_to_rad(cfg.get("dir", 0.0)) + PI
@@ -70,6 +74,7 @@ func _ready() -> void:
 	_bubble.font = load("res://assets/fonts/DejaVuSansCondensed-Bold.ttf")
 	_bubble.position.y = 2.35
 	add_child(_bubble)
+	_bubble_alpha(0.0)
 	_seq_t = randf() * 1.5
 	_play(_seq_anim())
 
@@ -97,7 +102,7 @@ func _process(delta: float) -> void:
 	var d := INF
 	if p and not p.dead: d = p.global_position.distance_to(global_position)
 	# le joueur approche : il le regarde, le salue et parle
-	if d < 2.6 and _talk_cd <= 0.0:
+	if d < 2.6 and _talk_cd <= 0.0 and _floor_free():
 		_talk_cd = 22.0
 		_greet_t = 2.6
 		_say(_line())
@@ -174,6 +179,8 @@ func _line() -> String:
 	if G.stats.contres_parfaits >= 3: facts.append("On raconte que tu détournes les coups au tout dernier instant.")
 	if k.get("araignee", 0) >= 1 and cfg.has("on_spider"): facts.append(cfg.on_spider)
 	if k.get("brute", 0) >= 2: facts.append("Les brutes du camp ont trouvé plus fort qu'elles, il paraît.")
+	# Aldric tient le registre : il appelle le joueur quand des exploits attendent d'être inscrits
+	if cfg.has("on_pending") and G.status.has_news(): return cfg.on_pending
 	var plain: Array = cfg.get("lines", ["Bonjour !"])
 	# une nouvelle qu'il n'a pas encore racontée passe toujours en premier
 	for f in facts:
@@ -186,9 +193,36 @@ func _line() -> String:
 		return facts[(_line_i / 2) % facts.size()]
 	return plain[_line_i % plain.size()]
 
+## Réagit à une action du joueur (mise à jour de statut) : geste et phrase, tout de suite.
+func react(anim: String, t: String) -> void:
+	_greet_t = 3.2
+	_play(anim)
+	_talk_cd = 22.0
+	_say(t)
+
+## Personne d'autre ne parle (bulle encore visible) ?
+func _floor_free() -> bool:
+	if _speaker == null or _speaker == self or not is_instance_valid(_speaker) or _speaker._bubble.modulate.a < 0.05: return true
+	# le joueur s'est éloigné de celui qui parle : le plus proche prend la parole
+	return G.player != null and _speaker.global_position.distance_to(G.player.global_position) > 4.0
+
+func _hush() -> void:
+	if _tw: _tw.kill()
+	_tw = _bubble.create_tween()
+	_tw.tween_method(_bubble_alpha, _bubble.modulate.a, 0.0, 0.15)
+
+## Le texte ET son contour s'effacent ensemble (sinon un fantôme de contour reste à l'écran).
+func _bubble_alpha(a: float) -> void:
+	_bubble.modulate.a = a
+	_bubble.outline_modulate.a = a * 0.9
+	_bubble.visible = a > 0.01
+
 func _say(t: String) -> void:
+	if _speaker != null and _speaker != self and is_instance_valid(_speaker): _speaker._hush()
+	_speaker = self
 	_bubble.text = t
-	var tw := _bubble.create_tween()
-	tw.tween_property(_bubble, "modulate:a", 1.0, 0.2)
-	tw.tween_interval(3.4)
-	tw.tween_property(_bubble, "modulate:a", 0.0, 0.5)
+	if _tw: _tw.kill()
+	_tw = _bubble.create_tween()
+	_tw.tween_method(_bubble_alpha, _bubble.modulate.a, 1.0, 0.2)
+	_tw.tween_interval(3.4)
+	_tw.tween_method(_bubble_alpha, 1.0, 0.0, 0.5)

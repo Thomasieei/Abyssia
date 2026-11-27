@@ -84,6 +84,19 @@ func _ready() -> void:
 	_aura = G.aura(self, "flame_02", Color(1.0, 0.28, 0.12, 0.55), 0.9)
 	_wind = G.aura(self, "smoke_04", Color(0.75, 1.0, 0.85, 0.35), 0.5)
 	_rune = G.ground_quad(self, "magic_03", Color(1.0, 0.82, 0.4, 0.0), 3.2)
+	G.status_changed.connect(_apply_status)
+	_apply_status()
+	hp = max_hp
+	energy = max_energy
+
+## Le statut inscrit au registre change le corps : vie et énergie max. (la vie garde sa proportion)
+func _apply_status() -> void:
+	var f := hp / max_hp
+	max_hp = G.status.max_hp()
+	hp = clampf(max_hp * f, 1.0, max_hp)
+	max_energy = G.status.max_energy()
+	energy = minf(energy, max_energy)
+	hp_changed.emit(hp, max_hp, shield)
 
 func _build_model() -> void:
 	# Tenue de rôdeur Quaternius (capuche visible seulement avec la Capuche de lin)
@@ -175,7 +188,7 @@ func _slide(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	for i in cd_left.size(): cd_left[i] = maxf(cd_left[i] - delta, 0.0)
-	energy = minf(energy + 7.0 * delta, max_energy)
+	energy = minf(energy + G.status.energy_regen() * delta, max_energy)
 	_tick_buffs(delta)
 	_tick_pending(delta)
 	if dead:
@@ -305,6 +318,7 @@ func _basic_attack(t: Node3D) -> void:
 		G.slash(global_position + forward() * 0.6, yaw, Color(1, 0.95, 0.8, 0.9), 1.6, i == 1)
 		if is_instance_valid(t) and not t.dead and t.global_position.distance_to(global_position) < ATTACK_RANGE + 0.8:
 			t.take_hit(BASE_DMG * dmg_mult() * randf_range(0.92, 1.08), global_position, 1.2, 0.0, i == 2)
+			G.status.gain("dexterite", 0.12)
 			_land_hit(t, 0.055, 0.18))
 
 # --- Contre (façon Lugaru) : appuyer sur l'attaque juste avant que le coup ennemi parte -------
@@ -319,7 +333,7 @@ func try_counter() -> bool:
 	var best_t := INF
 	for e in G.enemies:
 		var w: float = e.counter_window()
-		if w < 0.0 or w > COUNTER_WINDOW: continue
+		if w < 0.0 or w > COUNTER_WINDOW + G.status.counter_bonus(): continue
 		if e.target != self: continue
 		var reach: float = e.data.range + e.radius + 1.6
 		if e.global_position.distance_to(global_position) > reach: continue
@@ -327,7 +341,7 @@ func try_counter() -> bool:
 			best_t = w
 			best = e
 	if best == null: return false
-	_counter(best, best_t <= PERFECT_WINDOW)
+	_counter(best, best_t <= PERFECT_WINDOW + G.status.counter_bonus() * 0.5)
 	return true
 
 func _counter(e: Node3D, perfect: bool) -> void:
@@ -352,6 +366,7 @@ func _counter(e: Node3D, perfect: bool) -> void:
 	Sfx.play_at("hit_heavy", global_position, 2.0, 1.35 if perfect else 1.15)
 	Sfx.play_at("parade", global_position, 0.0, 1.0)
 	G.stats.contres += 1
+	G.status.gain("dexterite", 15.0 if perfect else 6.0)
 	energy = minf(energy + (30.0 if perfect else 15.0), max_energy)
 	if perfect:
 		G.stats.contres_parfaits += 1
@@ -374,12 +389,30 @@ func _counter(e: Node3D, perfect: bool) -> void:
 			if OS.get_environment("ABY_TEST") != "": print("TEST riposte ", e.kind, " dist=", snappedf(e.global_position.distance_to(global_position), 0.1))
 			if e.global_position.distance_to(global_position) < ATTACK_RANGE + e.radius + 1.2:
 				e.take_hit(BASE_DMG * dmg_mult() * (4.0 if perfect else 2.4), global_position, 2.2, 0.0, true)
-				_land_hit(e, 0.09, 0.4)))
+				_land_hit(e, 0.09, 0.4)
+			# technique « Dernier instant » : l'onde de la riposte parfaite renverse les ennemis proches
+			if perfect and G.status.has("dernier_instant"):
+				G.ring(global_position, "circle_05", Color(1.0, 0.88, 0.5, 0.95), 0.6, 9.0, 0.4)
+				G.ring(global_position, "magic_03", Color(1.0, 0.7, 0.3, 0.7), 1.0, 7.0, 0.55)
+				G.burst(global_position + Vector3.UP * 0.4, "dirt_02", Color(0.6, 0.5, 0.4, 0.8), 18, 6.0, 0.6, 0.5, -6.0)
+				for o in G.enemies:
+					if o == e or o.dead: continue
+					if o.global_position.distance_to(global_position) < 4.5 + o.radius:
+						o.take_hit(BASE_DMG * dmg_mult() * 1.2, global_position, 3.5, 0.0, true)
+						o.poise = 0.0
+				G.callout.emit("Dernier instant !", Color(1.0, 0.8, 0.4))))
 
 func _perfect_dodge() -> void:
 	if dead or _perfect_dodged: return
 	_perfect_dodged = true
 	G.stats.esquives_parfaites += 1
+	G.status.gain("agilite", 15.0)
+	# technique « Pas de l'ombre » : l'esquive parfaite donne de l'élan
+	if G.status.has("pas_ombre"):
+		_elan_t = 3.0
+		_wind.emitting = true
+		G.ring(global_position, "twirl_02", Color(0.6, 1.0, 0.85, 0.85), 0.6, 5.0, 0.45)
+		G.burst(global_position + Vector3.UP * 0.6, "smoke_04", Color(0.55, 0.9, 0.8, 0.55), 14, 3.5, 0.7, 0.6, 0.0)
 	G.slowmo(0.3, 420)
 	G.callout.emit("Esquive parfaite !", Color(0.6, 1.0, 0.85))
 	Sfx.play_at("parade", global_position, -6.0, 1.6)
@@ -419,6 +452,7 @@ func try_skill(slot: int) -> bool:
 				"roulade":
 					if not _skill_roulade(): return false
 	energy -= skills[slot]["cost"]
+	G.status.gain("magie", skills[slot]["cost"] / 8.0)
 	cd_left[slot] = skills[slot]["cd"]
 	cast.emit(slot, skills[slot]["cd"])
 	return true
@@ -503,11 +537,15 @@ func _skill_garde() -> void:
 	Sfx.play_at("hit_heavy", global_position, -6.0, 1.4)
 	hp_changed.emit(hp, max_hp, shield)
 
+var _elan_t := 0.0        # élan (technique « Pas de l'ombre »)
+var _brink := false       # au bord de la mort (pour « Ténacité »)
+var _tenace_cd := 0.0
+
 func dmg_mult() -> float:
-	return 1.4 if _fury_t > 0.0 else 1.0
+	return (1.4 if _fury_t > 0.0 else 1.0) * (1.5 if _elan_t > 0.0 else 1.0) * G.status.dmg_mult()
 
 func speed_mult() -> float:
-	return (1.6 if _haste_t > 0.0 else 1.0) * G.web_slow(global_position, false)
+	return (1.6 if _haste_t > 0.0 else 1.0) * (1.25 if _elan_t > 0.0 else 1.0) * G.status.speed_mult() * G.web_slow(global_position, false)
 
 ## Poison de la tisseuse : quelques dégâts à chaque demi-seconde (chiffres verts).
 var _poison_t := 0.0
@@ -580,7 +618,7 @@ func _skill_roulade() -> bool:
 	# esquive parfaite : on roule pendant que le coup ennemi va partir (fenêtre courte)
 	for e in G.enemies:
 		var w: float = e.counter_window()
-		if w < 0.0 or w > 0.3 or e.target != self: continue
+		if w < 0.0 or w > 0.3 + G.status.dodge_bonus() or e.target != self: continue
 		if e.global_position.distance_to(global_position) > e.data.range + e.radius + 2.5: continue
 		_later(w, _perfect_dodge)
 		break
@@ -590,6 +628,10 @@ func _skill_roulade() -> bool:
 
 func _tick_buffs(delta: float) -> void:
 	_invuln_t = maxf(_invuln_t - delta, 0.0)
+	_tenace_cd = maxf(_tenace_cd - delta, 0.0)
+	if _elan_t > 0.0:
+		_elan_t -= delta
+		if _elan_t <= 0.0 and _haste_t <= 0.0: _wind.emitting = false
 	if _poison_t > 0.0 and not dead:
 		_poison_t -= delta
 		_poison_tick -= delta
@@ -612,7 +654,7 @@ func _tick_buffs(delta: float) -> void:
 		if _fury_t <= 0.0 and _burn_t <= 0.0: _aura.emitting = false
 	if _haste_t > 0.0:
 		_haste_t -= delta
-		if _haste_t <= 0.0: _wind.emitting = false
+		if _haste_t <= 0.0 and _elan_t <= 0.0: _wind.emitting = false
 	if _shield_t > 0.0:
 		_rune.rotation.y += delta * 1.5
 		var m: StandardMaterial3D = _rune.mesh.material
@@ -666,7 +708,9 @@ func take_hit(dmg: float, from: Vector3, knock := 0.0) -> void:
 	if dead: return
 	if _invuln_t > 0.0:
 		G.burst(global_position + Vector3.UP, "smoke_04", Color(0.9, 0.9, 0.9, 0.5), 6, 2.0, 0.5, 0.3, 0.0)
+		if _dash_t > 0.0: G.status.gain("agilite", 3.0)   # un coup évité en roulant
 		return
+	G.status.gain("endurance", dmg / 6.0)
 	_last_hurt = Time.get_ticks_msec() / 1000.0
 	_stop_gather()
 	var now := Time.get_ticks_msec()
@@ -692,11 +736,24 @@ func take_hit(dmg: float, from: Vector3, knock := 0.0) -> void:
 		_replay("Hit_Chest", 0.05, 1.0)
 		_action = "hurt"
 		_action_t = 0.25
+	# au bord de la mort : « Ténacité » donne un sursaut
+	if hp <= 0.0 and G.status.has("tenace") and _tenace_cd <= 0.0:
+		hp = 1.0
+	if hp > 0.0 and hp < max_hp * 0.2:
+		_brink = true
+		if G.status.has("tenace") and _tenace_cd <= 0.0:
+			_tenace_cd = 60.0
+			hp = minf(hp + max_hp * 0.2, max_hp)
+			_invuln_t = 1.0
+			G.ring(global_position, "magic_03", Color(1.0, 0.45, 0.35, 0.9), 0.8, 5.5, 0.5)
+			G.burst(global_position + Vector3.UP, "light_01", Color(1.0, 0.6, 0.45, 0.9), 16, 3.0, 0.6, 0.7, 2.0)
+			G.callout.emit("Ténacité !", Color(1.0, 0.55, 0.45))
 	hp_changed.emit(hp, max_hp, shield)
 	if hp <= 0.0: _die()
 
 func _die() -> void:
 	dead = true
+	_brink = false
 	_bubble.visible = false
 	_replay("Death01", 0.1)
 	target = null
@@ -714,6 +771,11 @@ func _die() -> void:
 func _regen(delta: float) -> void:
 	if Time.get_ticks_msec() / 1000.0 - _last_hurt > 6.0 and hp < max_hp:
 		hp = minf(hp + max_hp * 0.04 * delta, max_hp)
+		# revenu du bord de la mort : un exploit de survie
+		if _brink and hp > max_hp * 0.5:
+			_brink = false
+			G.stats.survies += 1
+			G.status.gain("endurance", 8.0)
 		hp_changed.emit(hp, max_hp, shield)
 
 # --- Récolte ---------------------------------------------------------------

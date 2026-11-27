@@ -79,6 +79,11 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Les habitants parlent de ce que le joueur a vraiment fait (`G.stats` : `kills`, `gardien`, contres) ; une nouvelle pas encore racontée passe toujours en premier. Hors de vue (> 30 m), ils s'arrêtent complètement.
 - `ABY_TEST=bourg` + `ABY_CLOSE=1` : forgeron, marchande, tisserande, vieil homme assis, promeneurs, rumeur après le Gardien.
 - `ABY_TEST=relief` : captures de la crête nord, des falaises est, des collines ouest et de l'étang.
+- Statut (`scripts/status.gd`, `G.status`) : 5 aptitudes (Force, Endurance, Dextérité, Agilité, Magie) de 0 à 999, rangs I → S. **Tout gain passe par `G.status.gain(aptitude, x)`** au moment de l'acte réel (coup porté → Force dans `enemy.take_hit`, coup reçu → Endurance, contre → Dextérité, esquive parfaite / roulade qui évite → Agilité, sort lancé → Magie) ; le gain ralentit quand l'aptitude grandit. Il reste « en attente » jusqu'à la mise à jour au **Registre d'Aldric** (poste `statut` devant son banc). Les effets se lisent seulement via `G.status` (`dmg_mult`, `max_hp`, `counter_bonus`…), jamais en dur dans le héros.
+- Techniques (`Status.TECHS`) : nées d'un compteur de `G.stats` (contres parfaits, esquives parfaites, `chutes`, `survies`) et éveillées à la mise à jour. Niveau 2 = Gardien vaincu + une aptitude ≥ E ; les aptitudes repartent de I mais l'acquis reste (`banked`). Sauvegarde `user://statut.json` (jamais en test).
+- Bulles des habitants : **un seul parle à la fois** (`villager._speaker`), le plus proche du joueur reprend la parole. Un Label3D s'efface en fondant `modulate` **et** `outline_modulate` (sinon le contour reste en fantôme), puis `visible = false`.
+- Les animations d'interface se comptent en `G.real_dt` (indépendantes du ralenti) ; en test sous xvfb le jeu tourne lentement : attendre un événement (`["callout", texte]`) plutôt qu'une durée fixe.
+- `ABY_TEST=statut` : Aldric appelle, registre avant/pendant/après, techniques éveillées, niveau 2 (sceau), « Dernier instant » en combat, « Pas de l'ombre ». `ABY_TEST=proto` finit au registre avec ce que la partie a vraiment donné.
 
 ## Retours du créateur (à appliquer en priorité)
 
@@ -88,9 +93,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 ## Atelier de nuit
 
 Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
-Derniers chantiers faits : bourg vivant (Bran le forgeron, Maëlle la marchande, Ysolde la tisserande, le vieil Aldric, Jehan et Mahaut qui se promènent ; ils parlent de tes exploits) ; nouvelle espèce, la Tisseuse de mousse (bois des tisseuses, soie, Capuche de tisseuse) ; réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
+Derniers chantiers faits : progression par le jeu, 1re brique (statut façon DanMachi au Registre d'Aldric : 5 aptitudes nourries par les actes réels, 4 techniques nées des exploits — Dernier instant, Pas de l'ombre, Briseur, Ténacité —, niveau 2 par le Gardien) ; bulles des habitants qui se chevauchaient corrigées ; bourg vivant (Bran le forgeron, Maëlle la marchande, Ysolde la tisserande, le vieil Aldric, Jehan et Mahaut qui se promènent ; ils parlent de tes exploits) ; nouvelle espèce, la Tisseuse de mousse (bois des tisseuses, soie, Capuche de tisseuse) ; réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
 Boss fait : Gardien de cendre (repaire au nord-ouest du camp des brutes, 3 phases, rejetons, pluie de cendres, souffle en cône, Cœur ardent).
-Prochain : la progression par le jeu (techniques nées des contres et esquives de `G.stats`, « mise à jour de statut » au bourg auprès d'un habitant), puis le système d'esprit.
+Prochain : finir la progression par le jeu — remplacer les sorts donnés par l'équipement par des sorts appris en jouant (l'équipement reste un outil et une économie), plus de techniques (une par espèce vaincue souvent, une pour la récolte), sauvegarde complète (inventaire, équipement) ; puis le système d'esprit.
 
 ## Plus tard (idées en attente)
 
