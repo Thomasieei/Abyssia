@@ -28,6 +28,7 @@ const ITEMS := {
 	"cendre": {"name": "Cœur de cendre", "color": Color(1.0, 0.45, 0.15), "price": 16},
 	"griffe": {"name": "Griffe de rôdeur", "color": Color(0.7, 0.75, 0.95), "price": 11},
 	"coeur_ardent": {"name": "Cœur ardent", "color": Color(1.0, 0.3, 0.05), "price": 90},
+	"soie": {"name": "Soie de tisseuse", "color": Color(0.85, 0.95, 0.75), "price": 12},
 }
 
 ## Équipement : chaque pièce donne le sort de son emplacement (« tu es ce que tu portes »).
@@ -39,12 +40,14 @@ const GEAR := {
 	"plastron_cendre": {"name": "Plastron de cendre", "slot": "plastron", "spell": "embrase"},
 	"bottes_vent": {"name": "Bottes de voyage", "slot": "bottes", "spell": "vent"},
 	"bottes_rodeur": {"name": "Bottes du rôdeur", "slot": "bottes", "spell": "roulade"},
+	"capuche_soie": {"name": "Capuche de tisseuse", "slot": "casque", "spell": "toile"},
 }
 
 ## Recettes par poste de travail : produit, quantité, coût {objet: n}, argent, durée
 const RECIPES := {
 	"tisserand": [
 		{"out": "tissu", "n": 1, "cost": {"lin": 3}, "silver": 0, "time": 1.2},
+		{"out": "capuche_soie", "n": 1, "cost": {"soie": 3, "tissu": 1}, "silver": 20, "time": 1.8},
 	],
 	"forge": [
 		{"out": "capuche_lin", "n": 1, "cost": {"tissu": 3}, "silver": 15, "time": 1.6},
@@ -126,6 +129,47 @@ func _process(_d: float) -> void:
 func hitstop(ms: int) -> void:
 	Engine.time_scale = 0.04
 	_stop_until = maxi(_stop_until, Time.get_ticks_msec() + ms)
+
+## Toiles au sol : [position, rayon, fin (ms), nœud, de_joueur]. Ralentissent ce qui marche dedans.
+var webs: Array = []
+var _web_mat: StandardMaterial3D
+func web(pos: Vector3, r: float, dur: float, from_player := false) -> void:
+	if _web_mat == null:
+		_web_mat = StandardMaterial3D.new()
+		_web_mat.albedo_texture = load("res://assets/fx/toile.png")
+		_web_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_web_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_web_mat.albedo_color = Color(1, 1, 1, 0.9)
+	var m := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(r * 2.2, r * 2.2)
+	m.mesh = pm
+	m.material_override = _web_mat
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(m)
+	m.global_position = Vector3(pos.x, world.h(pos.x, pos.z) + 0.06, pos.z)
+	m.rotation.y = randf() * TAU
+	m.scale = Vector3.ONE * 0.2
+	m.create_tween().tween_property(m, "scale", Vector3.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var tw := m.create_tween()
+	tw.tween_interval(dur - 0.4)
+	tw.tween_property(m, "scale", Vector3.ONE * 0.6, 0.4)
+	tw.tween_callback(m.queue_free)
+	webs.append([pos, r, Time.get_ticks_msec() + int(dur * 1000.0), m, from_player])
+
+## Ralentissement (0..1) si une toile couvre ce point ; « by_player » = toiles posées par le joueur.
+func web_slow(p: Vector3, by_player: bool) -> float:
+	if webs.is_empty(): return 1.0
+	var now := Time.get_ticks_msec()
+	var k := 1.0
+	for i in range(webs.size() - 1, -1, -1):
+		var w: Array = webs[i]
+		if now > w[2]:
+			webs.remove_at(i)
+			continue
+		if w[4] != by_player: continue
+		if Vector2(p.x - w[0].x, p.z - w[0].z).length() < w[1]: k = 0.45
+	return k
 
 ## Ralenti (temps réel en ms) : contre parfait, esquive parfaite.
 var _slow_until := 0
@@ -375,6 +419,9 @@ func warmup(at: Vector3) -> void:
 	ring(p, "magic_03", Color.WHITE, 1.0, 1.1, 0.3)
 	streak(p, 0.0, Color.WHITE, 0.0)
 	number(p, 1, Color(1, 1, 1, 0.0))
+	web(p, 1.0, 0.6)
+	var wn: Array = webs.pop_back()
+	wn[3].global_position.y = p.y
 	for sh in 3:
 		var tl := telegraph(p, 0.0, sh, Vector2(2, 2), Color.WHITE)
 		tl.global_position.y = p.y

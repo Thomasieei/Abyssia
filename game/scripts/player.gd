@@ -30,6 +30,7 @@ const SPELLS := {
 	"embrase": {"name": "Embrasement", "cd": 20.0, "cost": 32.0},
 	"vent": {"name": "Pas de vent", "cd": 14.0, "cost": 18.0},
 	"roulade": {"name": "Roulade", "cd": 6.0, "cost": 12.0},
+	"toile": {"name": "Toile collante", "cd": 14.0, "cost": 24.0},
 }
 var skills: Array = []
 var cd_left := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -414,6 +415,7 @@ func try_skill(slot: int) -> bool:
 				"fureur": _skill_fureur()
 				"embrase": _skill_embrase()
 				"vent": _skill_vent()
+				"toile": _skill_toile()
 				"roulade":
 					if not _skill_roulade(): return false
 	energy -= skills[slot]["cost"]
@@ -505,7 +507,27 @@ func dmg_mult() -> float:
 	return 1.4 if _fury_t > 0.0 else 1.0
 
 func speed_mult() -> float:
-	return 1.6 if _haste_t > 0.0 else 1.0
+	return (1.6 if _haste_t > 0.0 else 1.0) * G.web_slow(global_position, false)
+
+## Poison de la tisseuse : quelques dégâts à chaque demi-seconde (chiffres verts).
+var _poison_t := 0.0
+var _poison_tick := 0.0
+func poison(dur: float) -> void:
+	_poison_t = maxf(_poison_t, dur)
+
+## Capuche de tisseuse : lance une toile sur la cible (ou devant soi) qui englue les ennemis.
+func _skill_toile() -> void:
+	var t := pick_target()
+	var at: Vector3 = t.global_position if t else global_position + forward() * 4.0
+	if t: face_now(t.global_position)
+	_replay("Spell_Simple_Shoot", 0.06, 1.3)
+	_action = "skill"
+	_action_t = 0.35
+	Sfx.play_at("swing", global_position, -4.0, 1.5)
+	_later(0.18, func():
+		G.web(at, 3.2, 6.0, true)
+		G.burst(at + Vector3.UP * 0.3, "smoke_04", Color(0.9, 0.95, 0.88, 0.7), 10, 2.5, 0.6, 0.5, 0.0)
+		_hit_circle(at, 3.2, BASE_DMG * 0.6, 0.0, 0.0))
 
 func _skill_fureur() -> void:
 	_fury_t = 6.0
@@ -568,6 +590,14 @@ func _skill_roulade() -> bool:
 
 func _tick_buffs(delta: float) -> void:
 	_invuln_t = maxf(_invuln_t - delta, 0.0)
+	if _poison_t > 0.0 and not dead:
+		_poison_t -= delta
+		_poison_tick -= delta
+		if _poison_tick <= 0.0:
+			_poison_tick = 0.5
+			hp = maxf(hp - 3.0, 1.0)
+			G.number(global_position + Vector3.UP * 2.0, 3, Color(0.55, 1.0, 0.35))
+			hp_changed.emit(hp, max_hp, shield)
 	if _burn_t > 0.0:
 		_burn_t -= delta
 		_burn_tick -= delta

@@ -17,7 +17,7 @@ const HILLS := [
 ]
 const POND := [-25.0, -10.0, 6.0, 1.6]      # x, z, rayon, profondeur
 const WATER_Y := -0.55
-const FLAT_ZONES := [[0, -23, 7.5], [22, -9, 5.5], [-12, 13, 7.0], [-17, -27, 6.5]]   # camp, tanière, prairie du lin, repaire du boss
+const FLAT_ZONES := [[0, -23, 7.5], [22, -9, 5.5], [-12, 13, 7.0], [-17, -27, 6.5], [20.5, 18.5, 5.5]]   # camp, tanière, prairie du lin, repaire du boss, bois des tisseuses
 
 static func _bump(t: float, k: float) -> float:
 	if t >= 1.0: return 0.0

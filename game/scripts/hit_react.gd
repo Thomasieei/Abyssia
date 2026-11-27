@@ -12,9 +12,9 @@ var _wobble := 0.0              # amplitude du titubement
 var _wob_t := 0.0
 var _scale := 1.0
 
-func setup(sk: Skeleton3D, scale := 1.0) -> void:
+func setup(sk: Skeleton3D, scale := 1.0, names := ["Spine", "Chest", "Head"]) -> void:
 	_scale = scale
-	for n in ["Spine", "Chest", "Head"]:
+	for n in names:
 		var b := sk.find_bone(n)
 		if b >= 0: _bones.append(b)
 

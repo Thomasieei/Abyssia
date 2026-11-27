@@ -38,6 +38,7 @@ const SKILL_STYLE := {
 	"embrase": {"col": Color(1.0, 0.5, 0.1), "tex": "flame_04"},
 	"vent": {"col": Color(0.65, 1.0, 0.55), "tex": "twirl_02"},
 	"roulade": {"col": Color(0.9, 0.78, 0.55), "tex": "smoke_04"},
+	"toile": {"col": Color(0.85, 0.95, 0.75), "tex": "circle_05"},
 }
 var panel := ""            # poste ouvert ("" = aucun)
 var _panel_title := ""
@@ -179,11 +180,24 @@ func _panel_rows() -> Array:
 	match panel:
 		"tisserand":
 			for r in G.RECIPES.tisserand:
-				rows.append([G.item_name(r.out), _cost_text(r), G.ITEMS[r.out].color, "Tisser", G.can_craft(r), ["craft", r]])
+				if G.GEAR.has(r.out):
+					var gd: Dictionary = G.GEAR[r.out]
+					var detail := "%s — sort : %s" % [gd.slot.capitalize(), player.SPELLS[gd.spell].name]
+					var col: Color = SKILL_STYLE[gd.spell].col
+					if G.owned_gear.has(r.out):
+						var on: bool = G.equipped[gd.slot] == r.out
+						rows.append([gd.name, detail, col, "Équipé" if on else "Équiper", not on, ["equip", r.out]])
+					else:
+						rows.append([gd.name, detail + "\n" + _cost_text(r), col, "Tisser", G.can_craft(r), ["craft", r]])
+				else:
+					rows.append([G.item_name(r.out), _cost_text(r), G.ITEMS[r.out].color, "Tisser", G.can_craft(r), ["craft", r]])
 		"forge":
 			var crafted := {}
 			for r in G.RECIPES.forge: crafted[r.out] = r
+			var elsewhere := {}
+			for r in G.RECIPES.tisserand: elsewhere[r.out] = true
 			for id in G.GEAR:
+				if elsewhere.has(id): continue   # se fabrique (et s'équipe) chez le tisserand
 				var gd: Dictionary = G.GEAR[id]
 				var spell: String = player.SPELLS[gd.spell].name
 				var detail := "%s — sort : %s" % [gd.slot.capitalize(), spell]
@@ -574,7 +588,7 @@ func _icon_leaf(c: Vector2, s: float, col: Color) -> void:
 	draw_line(c + Vector2(0, -0.9) * s, c + Vector2(0, 1.1) * s, col.darkened(0.5), 2.0)
 
 func _skill_glyph(id: String, c: Vector2, s: float, col: Color) -> void:
-	var i: int = ["entaille", "charge", "fracas", "garde", "fureur", "vent", "souffle", "embrase", "roulade"].find(id)
+	var i: int = ["entaille", "charge", "fracas", "garde", "fureur", "vent", "souffle", "embrase", "roulade", "toile"].find(id)
 	var sh := Color(0, 0, 0, 0.5)
 	for o in [Vector2(2, 2), Vector2.ZERO]:
 		var cc: Color = sh if o != Vector2.ZERO else col
@@ -619,6 +633,16 @@ func _skill_glyph(id: String, c: Vector2, s: float, col: Color) -> void:
 				draw_arc(q + Vector2(0, 0.1) * s, s * 0.62, PI * 0.9, PI * 2.1, 18, cc, s * 0.2, true)
 				var tip := q + Vector2(0.62, 0.1) * s + Vector2(0, 0.0)
 				draw_colored_polygon(PackedVector2Array([tip + Vector2(-0.3, -0.05) * s, tip + Vector2(0.3, -0.05) * s, tip + Vector2(0, 0.42) * s]), cc)
+			9: # Toile collante : rayons et spirale
+				for k in 6:
+					var a := TAU * k / 6.0
+					draw_line(q, q + Vector2(cos(a), sin(a)) * s * 0.92, cc, s * 0.1, true)
+				for rr in [0.32, 0.6, 0.86]:
+					var pts := PackedVector2Array()
+					for k in 7:
+						var a := TAU * k / 6.0
+						pts.append(q + Vector2(cos(a), sin(a)) * s * rr)
+					draw_polyline(pts, cc, s * 0.08, true)
 	if i == 3:
 		draw_line(c + Vector2(0, -0.6) * s, c + Vector2(0, 0.62) * s, Color(0.3, 0.45, 0.7), s * 0.14)
 		draw_line(c + Vector2(-0.45, -0.15) * s, c + Vector2(0.45, -0.15) * s, Color(0.3, 0.45, 0.7), s * 0.14)

@@ -72,6 +72,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Contre : toucher l'attaque dans les 0,32 s avant l'impact (zone qui blanchit), parfait < 0,14 s (ralenti `G.slowmo`, chute de l'ennemi, riposte ×4). Esquive parfaite = roulade lancée dans les 0,3 s avant un coup. La pluie du boss ne se contre pas. Tout est compté dans `G.stats` (future progression par le jeu).
 - Annonces (`announce`, haut) et exploits (`callout`, sous le héros) ne doivent pas se chevaucher.
 - `ABY_TEST=contre` : contre parfait, riposte, chute, relevé, contre simple, titubement, esquive parfaite, rôdeur, boss, bord doré du ralenti.
+- Tisseuse de mousse (`araignee`, Spider Quaternius « Easy Enemy », CC0, sans UV) : texture de mousse peinte par script en **projection triplanaire**, yeux émissifs. Noms d'animation traduits par `data.anims` (`_an()`), os de réaction par `data.bones`, chute par `data.down`. Pendue à `data.hang` m sur un fil dans les arbres, descend à l'alerte (le fil remonte), remonte au retour. Attaques : morsure (empoisonne, se contre), bond (arc de 0,35 s, se contre ou s'esquive), toile crachée (ralentit 5 s, ne se contre pas). Bois des tisseuses à l'est (20,5 ; 18,5), sentier depuis la route.
+- Toiles au sol : `G.web()` / `G.web_slow()` (joueur ralenti par celles des tisseuses, monstres par la Capuche de tisseuse, sort « Toile collante »). Le tisserand fabrique et équipe ses propres pièces (la forge ne les liste pas).
+- `ABY_TEST=tisseuse` (nid, descente, bond, toile, morsure, contre, sort Toile sur les brutes) et `ABY_TEST=tisseuse_proche` + `ABY_CLOSE=1`.
 - `ABY_TEST=relief` : captures de la crête nord, des falaises est, des collines ouest et de l'étang.
 
 ## Retours du créateur (à appliquer en priorité)
@@ -82,9 +85,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 ## Atelier de nuit
 
 Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
-Derniers chantiers faits : réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
+Derniers chantiers faits : nouvelle espèce, la Tisseuse de mousse (bois des tisseuses, soie, Capuche de tisseuse) ; réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
 Boss fait : Gardien de cendre (repaire au nord-ouest du camp des brutes, 3 phases, rejetons, pluie de cendres, souffle en cône, Cœur ardent).
-Prochain : une nouvelle espèce (avec ses propres attaques à contrer ou esquiver), puis les habitants du bourg (tenues Peasant), puis la progression par le jeu (techniques nées des contres et esquives de `G.stats`).
+Prochain : les habitants du bourg (tenues Peasant : forgeron, marchande, passants), puis la progression par le jeu (techniques nées des contres et esquives de `G.stats`, « mise à jour de statut » au bourg).
 
 ## Plus tard (idées en attente)
 

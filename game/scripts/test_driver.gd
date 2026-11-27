@@ -39,6 +39,19 @@ func _ready() -> void:
 			["wait", 1.0], ["state"], ["shot", "boss_chute"], ["slow"], ["wait", 0.1], ["shot", "ralenti_bord"], ["report"]]
 		_next()
 		return
+	if OS.get_environment("ABY_TEST") == "tisseuse_proche":
+		steps = [["tp", Vector3(18.0, 0, 22.0)], ["wait", 0.5], ["shot", "tisseuse_descend"], ["wait", 1.6], ["shot", "tisseuse_proche"], ["face"], ["wait", 0.2], ["shot", "tisseuse_face"]]
+		_next()
+		return
+	if OS.get_environment("ABY_TEST") == "tisseuse":
+		steps = [["tp", Vector3(11.5, 0, 24.0)], ["wait", 1.0], ["shot", "nid_tisseuses"], ["walk", Vector3(15.0, 0, 22.0)], ["wait", 0.35], ["shot", "descente"],
+			["wait", 1.2], ["shot", "au_sol"], ["walk", Vector3(11.0, 0, 24.5)], ["pat", "bond"], ["shot", "bond"], ["walk", Vector3(11.0, 0, 24.5)], ["pat", "toile"], ["shot", "toile_crachat"], ["wait", 0.5], ["shot", "toile_sol"],
+			["pat", "morsure"], ["shot", "morsure"], ["parry", 0.12], ["wait", 0.05], ["shot", "contre_tisseuse"], ["wait", 0.9], ["shot", "tisseuse_renversee"],
+			["fight", 25.0], ["shot", "apres_combat"],
+			["ownequip", "capuche_soie"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.5], ["walk", Vector3(0.5, 0, -18.5)], ["skill", 3], ["wait", 0.45], ["shot", "sort_toile"],
+			["wait", 1.0], ["shot", "brutes_engluees"], ["report"]]
+		_next()
+		return
 	if OS.get_environment("ABY_TEST") == "close":
 		steps = [["wait", 1.0], ["shot", "gros_plan_repos"], ["face"], ["wait", 0.3], ["shot", "gros_plan_face"],
 			["equip", "capuche_lin"], ["wait", 0.3], ["shot", "gros_plan_capuche"], ["equip", "casque_garde"], ["unface"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.6], ["shot", "gros_plan_brutes"],
@@ -121,6 +134,10 @@ func _next() -> void:
 		"slow":
 			G.slowmo(0.3, 3000)
 			G.callout.emit("Contre parfait !", Color(1.0, 0.85, 0.35))
+			_next()
+		"ownequip":
+			G.owned_gear[s[1]] = true
+			G.equip(s[1])
 			_next()
 		"state":
 			if is_instance_valid(_last_e): print("TEST etat ", _last_e.kind, " = ", _last_e.state_name(), " hp=", int(_last_e.hp), " dist=", snappedf(_last_e.global_position.distance_to(_p().global_position), 0.1))
@@ -212,6 +229,16 @@ func _process(delta: float) -> void:
 					return
 			if _t > 10.0:
 				print("TEST ", _mode, " timeout")
+				_next()
+		"pat":
+			# attend qu'une tisseuse prépare l'attaque demandée, juste avant l'impact
+			for e in G.enemies:
+				if e.kind == "araignee" and not e.dead and e.state_name() == "Attaque" and e._pattern == s[1] and e._atk_phase == 0 and e._atk_t < 0.22:
+					print("TEST attaque ", s[1], " t=", snappedf(e._atk_t, 0.01))
+					_next()
+					return
+			if _t > 14.0:
+				print("TEST pat ", s[1], " timeout")
 				_next()
 		"craftwait":
 			if G.hud.get_child(0)._craft_t <= 0.0 and _t > 0.2: _next()

@@ -30,6 +30,16 @@ const KINDS := {
 		"poise": 45.0, "silver": [2, 4], "drop": "", "flee_at": 0.0, "color": Color(1.0, 0.5, 0.2),
 		"tint": Color(1.4, 0.55, 0.3), "leash": 22.0, "respawn": -1.0,
 	},
+	"araignee": {
+		"scene": "res://assets/monsters/araignee.glb", "name": "Tisseuse de mousse", "scale": 0.4,
+		"hp": 190.0, "dmg": 20.0, "speed": 5.4, "radius": 0.8, "aggro": 9.5,
+		"range": 2.5, "windup": 0.5, "attack_anim_at": 0.28, "recover": 0.6,
+		"poise": 60.0, "silver": [8, 14], "drop": "soie", "flee_at": 0.0, "color": Color(0.75, 0.95, 0.5),
+		"leash": 18.0, "hang": 4.4, "bones": ["Body", "Thorax", "Head"], "down": [0.05, 0.9, 1.3],
+		"anims": {"Idle": "SpiderArmature|Spider_Idle", "Walk": "SpiderArmature|Spider_Walk", "Run": "SpiderArmature|Spider_Walk",
+			"Attack": "SpiderArmature|Spider_Attack", "Die": "SpiderArmature|Spider_Death", "Roar": "SpiderArmature|Spider_Attack",
+			"Jump": "SpiderArmature|Spider_Jump"},
+	},
 }
 const LEASH := 16.0
 const RESPAWN := 25.0
@@ -83,6 +93,12 @@ var poise := 100.0
 var _poise_idle := 0.0
 var _down_phase := 0
 var _cue := false
+# tisseuse : fil de soie (pendue dans les arbres), bond, crachat de toile
+var _thread: MeshInstance3D
+var _leap_from := Vector3.ZERO
+var _leap_to := Vector3.ZERO
+var _leaping := false
+var _spit: MeshInstance3D
 
 func setup(k: String, pos: Vector3, yaw: float) -> void:
 	kind = k
@@ -132,14 +148,17 @@ func _ready() -> void:
 			G.character_look(model, {"lava": true, "rim_amount": 0.45, "thick": 0.014, "outline": Color(0.08, 0.03, 0.02)})
 		"rodeur":
 			G.character_look(model, {"tint": Color(0.8, 0.84, 0.95), "rough": 0.22, "rim_amount": 0.7, "thick": 0.016, "outline": Color(0.04, 0.05, 0.09)})
+		"araignee":
+			G.character_look(model, {"rim_amount": 0.5, "thick": 0.05, "outline": Color(0.03, 0.04, 0.02)})
 		"rejeton":
 			G.character_look(model, {"rough": 0.3, "rim_amount": 0.6, "thick": 0.018, "outline": Color(0.12, 0.03, 0.0)})
 	if kind == "boss":
 		_boss_aura = G.aura(self, "flame_02", Color(1.0, 0.35, 0.08, 0.6), 1.4)
 		_boss_aura.emission_ring_radius = 1.6
 		_boss_aura.amount = 24
+	if kind == "araignee": _spider_look()
 	for a in ["Idle", "Run", "Walk"]:
-		ap.get_animation(a).loop_mode = Animation.LOOP_LINEAR
+		ap.get_animation(_an(a)).loop_mode = Animation.LOOP_LINEAR
 	ap.playback_default_blend_time = 0.18
 	_flash = StandardMaterial3D.new()
 	_flash.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -152,9 +171,10 @@ func _ready() -> void:
 	var sk: Skeleton3D = model.find_child("Skeleton3D")
 	react = HitReact.new()
 	sk.add_child(react)
-	react.setup(sk, 0.45 if kind == "boss" else 1.0)
+	react.setup(sk, 0.45 if kind == "boss" else 1.0, data.get("bones", ["Spine", "Chest", "Head"]))
+	if data.has("hang"): _hang(true)
 	_build_hsm()
-	ap.play("Idle")
+	ap.play(_an("Idle"))
 	ap.seek(randf() * 2.0, true)
 
 # --- Machine à états LimboAI -------------------------------------------
@@ -222,6 +242,7 @@ func call_for_help(p: Node3D) -> void:
 func _guard_enter() -> void:
 	target = null
 	_play("Idle")
+	if data.has("hang") and not dead and model.position.y < 0.1: _hang(true, 1.4)
 	_look_t = randf_range(2.0, 5.0)
 
 func _guard_update(delta: float) -> void:
@@ -240,6 +261,10 @@ func _guard_update(delta: float) -> void:
 func _alert_enter() -> void:
 	_play("Roar", 0.1, 1.6)
 	_timer = 0.85
+	if data.has("hang") and model.position.y > 0.1:
+		_hang(false)
+		_timer = 0.9
+	if kind == "araignee": _special_cd = 0.6 + randf() * 1.2
 	for a in camp:
 		if a != self: a.call_for_help(target)
 
@@ -269,6 +294,10 @@ func _chase_update(delta: float) -> void:
 	_special_cd -= delta
 	# le boss lance la pluie de cendres même à distance
 	if kind == "boss" and phase >= 2 and _special_cd <= 0.0 and _atk_cd <= 0.0:
+		_send(&"in_range")
+		return
+	# la tisseuse bondit ou crache sa toile à distance
+	if kind == "araignee" and _special_cd <= 0.0 and _atk_cd <= 0.0 and to.length() > 3.4 and to.length() < 8.5:
 		_send(&"in_range")
 		return
 	if to.length() <= data.range:
@@ -304,6 +333,9 @@ func _attack_enter() -> void:
 	if kind == "boss":
 		_boss_attack_enter(col)
 		return
+	if kind == "araignee":
+		_spider_attack_enter(col)
+		return
 	if kind == "brute":
 		_tele = G.telegraph(global_position + _atk_dir * 1.8, 0.0, 0, Vector2(6.4, 6.4), col)
 	else:
@@ -329,6 +361,7 @@ func _attack_update(delta: float) -> void:
 						G.announce.emit("Zone blanche : touche l'attaque pour contrer !")
 			for r in _rain:
 				if is_instance_valid(r): r.material_override.set_shader_parameter("progress", 1.0 - _atk_t / _windup())
+			if kind == "araignee": _spider_windup(delta)
 			if _atk_t <= data.attack_anim_at and not ap.is_playing():
 				ap.play()
 			if _atk_t <= 0.0:
@@ -343,6 +376,9 @@ func _strike() -> void:
 	if is_instance_valid(_tele): _tele.queue_free()
 	if kind == "boss":
 		_boss_strike()
+		return
+	if kind == "araignee":
+		_spider_strike()
 		return
 	var p: Node3D = G.player
 	var hit := false
@@ -375,6 +411,9 @@ func _attack_exit() -> void:
 		if is_instance_valid(r): r.queue_free()
 	_rain.clear()
 	if is_instance_valid(_tele): _tele.queue_free()
+	if is_instance_valid(_spit): _spit.queue_free()
+	_leaping = false
+	if kind == "araignee": model.position.y = 0.0
 	if not ap.is_playing(): ap.play()
 
 # Retour au camp : se régénère, ignore les coups un instant
@@ -466,6 +505,7 @@ func _respawn() -> void:
 	dead = false
 	_col.disabled = false
 	model.visible = true
+	if data.has("hang"): _hang(true)
 	model.scale = Vector3.ONE * data.scale * 0.2
 	model.create_tween().tween_property(model, "scale", Vector3.ONE * data.scale, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	G.burst(global_position + Vector3.UP * 0.5, "smoke_04", Color(0.4, 0.35, 0.45, 0.7), 14, 2.5, 1.2, 0.8, 0.5)
@@ -493,8 +533,11 @@ func _stagger_update(delta: float) -> void:
 func _down_enter() -> void:
 	_down_phase = 0
 	_timer = 0.0
-	_play("Die", 0.08, 1.5)
-	ap.seek(0.55, true)
+	var dn: Array = data.get("down", [0.55, 1.42, 1.5])
+	_play("Die", 0.08, dn[2])
+	ap.seek(dn[0], true)
+	_leaping = false
+	model.position.y = 0.0
 	Sfx.play_at("slam", global_position, -4.0, 0.8)
 
 func _down_update(delta: float) -> void:
@@ -502,7 +545,7 @@ func _down_update(delta: float) -> void:
 	_timer += delta
 	match _down_phase:
 		0:
-			if ap.current_animation_position >= 1.42:
+			if ap.current_animation_position >= data.get("down", [0.55, 1.42])[1]:
 				ap.pause()
 				_down_phase = 1
 				_timer = 0.0
@@ -514,7 +557,7 @@ func _down_update(delta: float) -> void:
 				ap.speed_scale = -1.25
 				ap.play()
 		2:
-			if ap.current_animation_position <= 0.6:
+			if ap.current_animation_position <= data.get("down", [0.55])[0] + 0.05:
 				_send(&"done")
 
 func _down_exit() -> void:
@@ -525,6 +568,7 @@ func _down_exit() -> void:
 func counter_window() -> float:
 	if dead or state_name() != "Attaque" or _atk_phase != 0: return -1.0
 	if kind == "boss" and _pattern == "pluie": return -1.0
+	if kind == "araignee" and _pattern == "toile": return -1.0
 	return _atk_t
 
 ## Le joueur a paré : le coup ne part pas.
@@ -539,6 +583,167 @@ func countered(perfect: bool) -> void:
 		_send(&"knockdown")
 	else:
 		_send(&"stagger")
+
+# --- Tisseuse de mousse -------------------------------------------------
+static var _spider_mat: StandardMaterial3D
+static var _eye_mat: StandardMaterial3D
+static var _thread_mat: StandardMaterial3D
+
+## Carapace sombre couverte de mousse (texture peinte par script, projection triplanaire :
+## le modèle n'a pas d'UV) et huit yeux vert-jaune qui luisent.
+func _spider_look() -> void:
+	if _spider_mat == null:
+		_spider_mat = StandardMaterial3D.new()
+		_spider_mat.albedo_texture = load("res://assets/monsters/araignee_mousse.png")
+		_spider_mat.uv1_triplanar = true
+		_spider_mat.uv1_scale = Vector3.ONE * 14.0
+		_spider_mat.roughness = 0.75
+		_spider_mat.resource_name = "Tisseuse"
+		_eye_mat = StandardMaterial3D.new()
+		_eye_mat.albedo_color = Color(0.75, 1.0, 0.3)
+		_eye_mat.emission_enabled = true
+		_eye_mat.emission = Color(0.7, 1.0, 0.25)
+		_eye_mat.emission_energy_multiplier = 1.6
+		_eye_mat.resource_name = "Eye_Tisseuse"
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		mi.set_surface_override_material(0, _spider_mat)
+		if mi.mesh.get_surface_count() > 1: mi.set_surface_override_material(1, _eye_mat)
+
+## Pendue à son fil dans les arbres (true) ou au sol (false).
+func _hang(up: bool, dur := 0.0) -> void:
+	var hy: float = data.hang
+	if _thread == null:
+		_thread = MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.012
+		cm.bottom_radius = 0.012
+		cm.height = 1.0
+		cm.radial_segments = 4
+		cm.rings = 1
+		_thread.mesh = cm
+		if _thread_mat == null:
+			_thread_mat = StandardMaterial3D.new()
+			_thread_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			_thread_mat.albedo_color = Color(0.92, 0.95, 0.9)
+		_thread.material_override = _thread_mat
+		_thread.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_thread)
+	var top := hy + 6.0
+	var y0 := model.position.y
+	var y1 := hy if up else 0.0
+	if dur <= 0.0 and up:
+		model.position.y = y1
+		_set_thread(top, y1)
+		return
+	var tw := create_tween()
+	tw.tween_method(func(y: float):
+		model.position.y = y
+		_set_thread(top, y), y0, y1, dur if dur > 0.0 else 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN if not up else Tween.EASE_IN_OUT)
+	if not up:
+		tw.tween_callback(func():
+			# le fil se détache et remonte dans l'arbre
+			var t2 := create_tween()
+			t2.tween_method(func(k: float): _set_thread(top, lerpf(0.0, top - 0.3, k)), 0.0, 1.0, 0.5)
+			G.burst(global_position + Vector3.UP * 0.1, "dirt_02", Color(0.5, 0.45, 0.35, 0.8), 10, 2.5, 0.6, 0.45, -6.0)
+			Sfx.play_at("step", global_position, -4.0, 0.7))
+
+func _set_thread(top: float, y: float) -> void:
+	var len := maxf(top - y - 0.25, 0.01)
+	_thread.visible = len > 0.05
+	_thread.scale = Vector3(1, len, 1)
+	_thread.position = Vector3(0, y + 0.25 + len * 0.5, 0)
+
+func _spider_attack_enter(col: Color) -> void:
+	var to := target.global_position - global_position
+	to.y = 0
+	var dist := to.length()
+	if dist > 3.2:
+		_pattern = "bond" if randf() < 0.55 else "toile"
+		_special_cd = 3.5 + randf() * 2.0
+	elif _special_cd <= 0.0 and randf() < 0.4:
+		_pattern = "toile"      # au corps à corps, elle englue sa proie avant de mordre
+		_special_cd = 4.0 + randf() * 2.0
+	else:
+		_pattern = "morsure"
+	match _pattern:
+		"morsure":
+			_tele = G.telegraph(global_position, rotation.y, 2, Vector2(1.4, 3.0), col)
+			_play("Attack", 0.1, 1.0)
+		"bond":
+			_leap_from = global_position
+			_leap_to = global_position + to.normalized() * minf(dist, 8.0)
+			_leap_to.y = G.world.h(_leap_to.x, _leap_to.z)
+			_tele = G.telegraph(_leap_to, 0.0, 0, Vector2(4.4, 4.4), col)
+			_play("Jump", 0.1, 1.0)
+		"toile":
+			var tp: Vector3 = target.global_position
+			_leap_to = tp
+			_tele = G.telegraph(tp, 0.0, 0, Vector2(4.8, 4.8), Color(0.85, 0.95, 0.8, 0.85))
+			_play("Attack", 0.1, 0.8)
+	ap.seek(0.0, true)
+	ap.pause()
+	_atk_t = _windup_len()
+
+func _windup_len() -> float:
+	return {"morsure": 0.5, "bond": 0.8, "toile": 0.95}.get(_pattern, data.windup)
+
+## Pendant la préparation : le bond part 0,35 s avant l'impact (arc), le crachat vole vers sa cible.
+func _spider_windup(delta: float) -> void:
+	if _pattern == "bond" and _atk_t <= 0.35:
+		if not _leaping:
+			_leaping = true
+			ap.play()
+			Sfx.play_at("swing", global_position, -4.0, 0.6)
+		var t := clampf(1.0 - _atk_t / 0.35, 0.0, 1.0)
+		var p := _leap_from.lerp(_leap_to, t)
+		global_position = Vector3(p.x, maxf(global_position.y, p.y), p.z)
+		model.position.y = sin(t * PI) * 1.8
+	elif _pattern == "toile" and _atk_t <= 0.3:
+		if _spit == null:
+			_spit = MeshInstance3D.new()
+			var sm := SphereMesh.new()
+			sm.radius = 0.18
+			sm.height = 0.36
+			sm.radial_segments = 8
+			sm.rings = 4
+			_spit.mesh = sm
+			_spit.material_override = _thread_mat
+			G.world.add_child(_spit)
+			Sfx.play_at("swing", global_position, -6.0, 1.5)
+		var t2 := clampf(1.0 - _atk_t / 0.3, 0.0, 1.0)
+		var a := global_position + Vector3.UP * 0.6
+		_spit.global_position = a.lerp(_leap_to, t2) + Vector3.UP * sin(t2 * PI) * 2.0
+
+func _spider_strike() -> void:
+	var p: Node3D = G.player
+	var hit := false
+	match _pattern:
+		"morsure":
+			Sfx.play_at("flesh", global_position, -4.0, 1.4)
+			if p and not p.dead:
+				var rel := p.global_position - global_position
+				rel.y = 0
+				var along := rel.dot(_atk_dir)
+				if along > -0.3 and along < 3.1 and (rel - _atk_dir * along).length() < 0.9: hit = true
+			if hit:
+				p.take_hit(data.dmg * randf_range(0.9, 1.1), global_position, 1.0)
+				p.poison(4.0)
+		"bond":
+			_leaping = false
+			model.position.y = 0.0
+			G.burst(global_position + Vector3.UP * 0.15, "dirt_02", Color(0.5, 0.42, 0.32, 0.9), 16, 4.5, 0.8, 0.5, -8.0)
+			Sfx.play_at("slam", global_position, -3.0, 1.2)
+			G.shake(0.2)
+			if p and not p.dead and Vector2(p.global_position.x - global_position.x, p.global_position.z - global_position.z).length() < 2.2 + 0.3: hit = true
+			if hit: p.take_hit(data.dmg * 1.4 * randf_range(0.9, 1.1), global_position, 2.0)
+		"toile":
+			if is_instance_valid(_spit): _spit.queue_free()
+			_spit = null
+			G.web(_leap_to, 2.4, 5.0)
+			Sfx.play_at("gather", _leap_to, 0.0, 0.7)
+			if p and not p.dead and Vector2(p.global_position.x - _leap_to.x, p.global_position.z - _leap_to.z).length() < 2.4: hit = true
+			if hit: p.take_hit(data.dmg * 0.4, _leap_to, 0.0)
+	if hit: G.hitstop(50)
 
 # --- Coups reçus -------------------------------------------------------
 func take_hit(dmg: float, from: Vector3, knock := 1.0, stun := 0.0, heavy := false) -> void:
@@ -598,7 +803,12 @@ func _drop_loot() -> void:
 		if drop != "": G.give_item(drop, 1))
 
 # --- Mouvement ---------------------------------------------------------
+func _an(a: String) -> String:
+	return data.anims.get(a, a) if data.has("anims") else a
+
 func _play(a: String, blend := -1.0, speed := 1.0) -> void:
+	if kind == "araignee" and a == "Run": speed *= 1.8
+	a = _an(a)
 	if ap.current_animation == a and ap.is_playing():
 		ap.speed_scale = speed
 		return
@@ -625,6 +835,7 @@ func _move(v: Vector3, delta: float) -> void:
 			_stuck_t = 0.0
 	_last_pos = global_position
 	_push = _push.move_toward(Vector3.ZERO, 30.0 * delta)
+	if not G.webs.is_empty(): v *= G.web_slow(global_position, true)
 	velocity = v + _push
 	_vy = -1.0 if is_on_floor() else _vy - 28.0 * delta
 	velocity.y = _vy
@@ -641,6 +852,7 @@ func _turn_to(p: Vector3, delta: float, rate: float) -> void:
 
 # --- Boss : Gardien de cendre --------------------------------------------------
 func _windup() -> float:
+	if kind == "araignee": return _windup_len()
 	return data.windup * (0.7 if phase == 3 else 1.0)
 
 func _check_phase() -> void:

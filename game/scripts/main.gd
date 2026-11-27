@@ -25,6 +25,8 @@ const PATHS := [
 	[-2, 12, -9, 14, 0.8], [-9, 14, -13, 11, 0.7],
 	# sentier du repaire du Gardien (depuis le camp des brutes)
 	[-3, -24, -9, -25.5, 0.9], [-9, -25.5, -13, -27, 0.9],
+	# sentier du bois des tisseuses (à l'est de la route)
+	[1, 27, 7, 25.5, 1.0], [7, 25.5, 12.5, 23.5, 0.9], [12.5, 23.5, 16.5, 21.5, 0.85],
 	# route du bourg et allées vers les portes
 	[0, 36, 0.3, 45, 1.6], [0.3, 45, 0, 52, 1.8], [-6.3, 58, -2, 58.5, 1.1], [6.3, 60, 2, 60, 1.1], [0, 71.5, 0, 64, 1.3],
 	[-8, 70, -4, 66, 0.8], [8, 72, 4, 66, 0.8], [-7, 47, -3, 50, 0.8], [7, 47, 3, 50, 0.8],
@@ -51,7 +53,7 @@ const DECOR := [
 	# --- bosquets intérieurs (ils cadrent le chemin) ---
 	["CommonTree_1", -9, 26, 20, 1.0, 0.5], ["CommonTree_5", 8, 22, 140, 0.95, 0.5], ["Bush_Common", 6, 24, 0, 1.1, 0.0],
 	["CommonTree_3", -20, 4, 60, 1.1, 0.5], ["CommonTree_2", -24, -1, 200, 1.0, 0.5], ["Pine_4", -17.5, -1, 0, 1.0, 0.5],
-	["CommonTree_4", 13, 13, 90, 1.05, 0.5], ["CommonTree_1", 18, 17, 310, 1.0, 0.5], ["Pine_1", 16, 24, 30, 0.9, 0.5],
+	["CommonTree_4", 13, 13, 90, 1.05, 0.5], ["CommonTree_1", 18, 17, 310, 1.0, 0.5], ["Pine_1", 10.5, 30.0, 30, 0.9, 0.5],
 	["TwistedTree_1", -15, -5, 30, 0.72, 0.4], ["CommonTree_5", -15, -14, 100, 1.05, 0.5],
 	["TwistedTree_3", 14, -20, 210, 0.75, 0.4], ["Pine_3", -24, -20, 50, 1.05, 0.5], ["CommonTree_2", 22, -24, 150, 1.0, 0.5],
 	# --- étang (ouest) : roseaux, pierres de berge ---
@@ -70,6 +72,10 @@ const DECOR := [
 	["Rock_Medium_1", -10.5, -31.5, 290, 1.9, 0.85], ["Rock_Medium_3", -22.5, -21.5, 70, 1.6, 0.85],
 	["DeadTree_2", -13.5, -32.5, 210, 1.1, 0.4],
 	["Pebble_Round_3", -15.0, -24.5, 0, 2.2, 0.0], ["Pebble_Round_1", -19.5, -31.0, 0, 2.4, 0.0], ["Pebble_Square_2", -12.5, -28.5, 0, 2.0, 0.0],
+	# --- bois des tisseuses : arbres qui portent les araignées, souche morte ---
+	["CommonTree_2", 23.5, 21.5, 200, 1.1, 0.5], ["DeadTree_2", 22.4, 15.4, 120, 0.9, 0.4], ["CommonTree_3", 25.8, 18.0, 60, 0.9, 0.5],
+	["Fern_1", 19.0, 21.6, 30, 1.2, 0.0], ["Fern_1", 24.6, 15.6, 200, 1.1, 0.0], ["Mushroom_Common", 21.2, 20.6, 0, 1.4, 0.0],
+	["Mushroom_Common", 17.4, 18.4, 90, 1.2, 0.0], ["Pebble_Round_3", 20.0, 15.2, 0, 1.6, 0.0],
 	# --- rochers ---
 	["Rock_Medium_1", 9, 6, 30, 1.0, 1.2], ["Rock_Medium_3", -17, 21, 200, 0.9, 1.0], ["Rock_Medium_2", 15, 4, 90, 0.7, 0.8],
 	["Rock_Medium_2", -7, -4, 300, 0.8, 0.9], ["Rock_Medium_1", -27, 12, 120, 1.1, 1.2], ["Rock_Medium_3", 26, 14, 10, 1.0, 1.1],
@@ -122,6 +128,7 @@ const MONSTERS := {
 	"brutes": [["brute", -2.5, -21, 200], ["brute", 3.0, -22.5, 160]],
 	"rodeurs": [["rodeur", 21, -8, 250], ["rodeur", 23.5, -10.5, 220], ["rodeur", 20, -11.5, 280]],
 	"repaire": [["boss", -18, -28.5, 140]],
+	"tisseuses": [["araignee", 18.6, 17.6, 200], ["araignee", 23.0, 20.8, 230], ["araignee", 21.9, 16.0, 180]],
 }
 
 var cam: Camera3D
@@ -173,6 +180,7 @@ func _ready() -> void:
 	for d in FPROPS: _place("res://assets/fprops/%s.gltf" % d[0], d)
 	_build_campfire(Vector3(0, 0, -24))
 	_lair_embers()
+	_spider_nest()
 	var town: Node = Town.new()
 	add_child(town)
 	town.build(self)
@@ -505,6 +513,59 @@ func _build_campfire(pos: Vector3) -> void:
 	add_child(t)
 
 ## Braises qui couvent dans le repaire : lueurs orange et fumerolles.
+## Bois des tisseuses : toiles tendues entre les troncs, toiles au sol, cocons de soie.
+func _spider_nest() -> void:
+	var web := StandardMaterial3D.new()
+	web.albedo_texture = load("res://assets/fx/toile.png")
+	web.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	web.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	web.cull_mode = BaseMaterial3D.CULL_DISABLED
+	web.albedo_color = Color(1, 1, 1, 0.75)
+	# toiles verticales : [x, z, hauteur, taille, angle°]
+	for w in [[20.4, 16.0, 2.2, 2.6, 15], [24.9, 19.6, 2.0, 2.2, -65], [17.2, 20.4, 1.8, 2.0, 70], [22.6, 22.4, 2.4, 1.8, 10]]:
+		var m := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(w[3], w[3])
+		m.mesh = q
+		m.material_override = web
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(m)
+		m.position = Vector3(w[0], h(w[0], w[1]) + w[2], w[1])
+		m.rotation_degrees = Vector3(0, w[4], 0)
+	# toiles au sol (décor)
+	var flat := web.duplicate()
+	flat.cull_mode = BaseMaterial3D.CULL_BACK
+	flat.albedo_color = Color(1, 1, 1, 0.55)
+	for g in [[20.6, 18.8, 3.0, 0], [23.6, 17.4, 2.0, 40], [18.4, 19.8, 1.8, 120]]:
+		var m := MeshInstance3D.new()
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(g[2], g[2])
+		m.mesh = pm
+		m.material_override = flat
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(m)
+		m.position = Vector3(g[0], h(g[0], g[1]) + 0.05, g[1])
+		m.rotation_degrees.y = g[3]
+	# cocons de soie, posés en grappes
+	var silk := StandardMaterial3D.new()
+	silk.albedo_color = Color(0.86, 0.9, 0.8)
+	silk.roughness = 0.9
+	silk.rim_enabled = true
+	silk.rim = 0.5
+	var sm := SphereMesh.new()
+	sm.radius = 0.5
+	sm.height = 1.0
+	sm.radial_segments = 10
+	sm.rings = 6
+	for c in [[24.3, 16.7, 0.36], [24.8, 17.1, 0.28], [24.0, 17.3, 0.24], [17.6, 18.9, 0.3], [17.2, 18.5, 0.22], [22.0, 22.9, 0.26]]:
+		var m := MeshInstance3D.new()
+		m.mesh = sm
+		m.material_override = silk
+		add_child(m)
+		m.position = Vector3(c[0], h(c[0], c[1]) + c[2] * 0.6, c[1])
+		m.scale = Vector3(c[2] * 1.6, c[2] * 2.1, c[2] * 1.6)
+		m.rotation_degrees = Vector3(randf_range(-12, 12), randf() * 360.0, randf_range(-12, 12))
+
 func _lair_embers() -> void:
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.45, 0.15)
