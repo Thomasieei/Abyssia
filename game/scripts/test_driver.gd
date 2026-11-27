@@ -39,6 +39,13 @@ func _ready() -> void:
 			["wait", 1.0], ["state"], ["shot", "boss_chute"], ["slow"], ["wait", 0.1], ["shot", "ralenti_bord"], ["report"]]
 		_next()
 		return
+	if OS.get_environment("ABY_TEST") == "bourg":
+		steps = [["wait", 2.0], ["shot", "place"], ["tp", Vector3(6.0, 0, 63.5)], ["wait", 1.2], ["shot", "forgeron"], ["wait", 3.0], ["shot", "forgeron2"], ["face"], ["tp", Vector3(5.4, 0, 60.0)], ["wait", 1.4], ["shot", "forgeron_face"], ["unface"],
+			["tp", Vector3(3.5, 0, 52.5)], ["wait", 1.0], ["shot", "marchande"], ["tp", Vector3(-4.0, 0, 58.5)], ["wait", 1.0], ["shot", "tisserande"],
+			["tp", Vector3(-2.0, 0, 64.8)], ["wait", 1.0], ["shot", "vieux_banc"], ["tp", Vector3(1.0, 0, 60.5)], ["wait", 4.0], ["shot", "promeneurs"],
+			["tp", Vector3(1.0, 0, 70.0)], ["boss_tue"], ["tp", Vector3(5.5, 0, 63.6)], ["wait", 1.0], ["shot", "rumeur_forgeron"], ["report"]]
+		_next()
+		return
 	if OS.get_environment("ABY_TEST") == "tisseuse_proche":
 		steps = [["tp", Vector3(18.0, 0, 22.0)], ["wait", 0.5], ["shot", "tisseuse_descend"], ["wait", 1.6], ["shot", "tisseuse_proche"], ["face"], ["wait", 0.2], ["shot", "tisseuse_face"]]
 		_next()
@@ -134,6 +141,13 @@ func _next() -> void:
 		"slow":
 			G.slowmo(0.3, 3000)
 			G.callout.emit("Contre parfait !", Color(1.0, 0.85, 0.35))
+			_next()
+		"boss_tue":
+			G.stats.gardien = true
+			for v in get_tree().root.find_children("*", "Node3D", true, false):
+				if v.get_script() == preload("res://scripts/villager.gd"):
+					print("TEST habitant ", v.name, " cd=", snappedf(v._talk_cd, 0.1))
+					v._talk_cd = 0.0
 			_next()
 		"ownequip":
 			G.owned_gear[s[1]] = true

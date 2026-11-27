@@ -81,6 +81,42 @@ const STATIONS := [
 	{"id": "marche", "label": "Vendre", "title": "Marché du bourg", "pos": Vector3(0, 0, 51.5)},
 ]
 
+## Habitants : chacun posé à la main, avec sa routine et ses phrases.
+const PM := "res://assets/outfits/Male_Peasant.gltf"
+const PF := "res://assets/outfits/Female_Peasant.gltf"
+const T2 := "res://assets/outfits/T_Peasant_2_BaseColor.png"
+const HAMMER := "res://assets/fprops/Hammer_Small.glb"
+const VILLAGERS := [
+	{"name": "Bran", "pos": Vector3(4.15, 0, 62.25), "dir": 90.0,
+		"look": {"outfit": PM, "hair": "res://assets/hero/Hair_Buzzed.gltf", "beard": true, "hair_color": Color(0.18, 0.12, 0.08), "skin": Color(0.92, 0.8, 0.72)},
+		"hold": [[HAMMER, "hand_r", Vector3(0.0, 0.06, 0.02), Vector3(0, -90, -90), 0.1]],
+		"seq": [["Mining", 5.2], ["Idle_FoldArms", 3.0]], "anvil": Vector3(5.0, 1.15, 62.0), "greet": "Yes",
+		"lines": ["Le fer chante bien aujourd'hui.", "Apporte-moi du tissu et de la cendre, je te forge une armure."],
+		"on_boss": "Un Cœur ardent… Je n'avais jamais vu ça. Tu as vraiment tué le Gardien ?"},
+	{"name": "Maëlle", "pos": Vector3(4.3, 0, 49.2), "dir": -10.0,
+		"look": {"base": "female", "outfit": PF, "hair": "res://assets/hero/Hair_Buns.gltf", "hair_color": Color(0.45, 0.22, 0.1)},
+		"seq": [["Counter_Idle", 5.0], ["Counter_Show", 3.0], ["Idle_Talking", 3.5]], "greet": "Counter_Give",
+		"lines": ["Lin, griffes, cendre… je t'achète tout !", "Le marché ouvre avec le soleil, comme toujours."],
+		"on_spider": "De la soie de tisseuse ? Ça se vend bien, tu sais."},
+	{"name": "Ysolde", "pos": Vector3(-4.4, 0, 56.2), "dir": 180.0,
+		"look": {"base": "female", "outfit": PF, "texture": T2, "hair": "res://assets/hero/Hair_Long.gltf", "hair_color": Color(0.75, 0.6, 0.35)},
+		"seq": [["PickUp_Table", 3.2], ["Interact", 2.4], ["Idle", 2.5]], "greet": "Yes",
+		"lines": ["Trois fibres de lin font un bon tissu.", "Le lin pousse dans la prairie, à l'ouest de la route."],
+		"on_spider": "La soie des tisseuses ! Rapporte-m'en trois, je te tisse une capuche."},
+	{"name": "Aldric", "pos": Vector3(-3.7, 0, 63.0), "dir": 215.0, "seated": true,
+		"look": {"outfit": PM, "texture": T2, "beard": true, "hair_color": Color(0.82, 0.8, 0.76), "skin": Color(0.95, 0.86, 0.8)},
+		"seq": [["Sitting_Idle", 6.0], ["Sitting_Nodding", 3.0], ["Sitting_Talking", 4.0]],
+		"lines": ["Méfie-toi de la crête au nord, petit.", "De mon temps, on chassait les brutes à mains nues."]},
+	{"name": "Jehan", "pos": Vector3(-1.5, 0, 53.5),
+		"look": {"outfit": PM, "hair": "res://assets/hero/Hair_SimpleParted.gltf", "hair_color": Color(0.3, 0.2, 0.1)},
+		"route": [Vector3(-1.5, 0, 53.5), Vector3(-3.0, 0, 58.0), Vector3(-1.6, 0, 66.0), Vector3(1.6, 0, 66.0), Vector3(3.0, 0, 58.2), Vector3(1.6, 0, 53.5)],
+		"pauses": {0: 3.0, 3: 2.5}, "lines": ["Belle journée à Brumefeuille.", "Tu reviens de la clairière ? Raconte !"]},
+	{"name": "Mahaut", "pos": Vector3(-8.0, 0, 69.8), "walk": "Walk_Formal",
+		"look": {"base": "female", "outfit": PF, "hair": "res://assets/hero/Hair_BuzzedFemale.gltf", "hair_color": Color(0.12, 0.08, 0.06), "skin": Color(0.78, 0.6, 0.48)},
+		"route": [Vector3(-8.0, 0, 69.8), Vector3(-4.0, 0, 66.0), Vector3(0.0, 0, 64.6), Vector3(0.0, 0, 70.8), Vector3(0.0, 0, 64.6), Vector3(-4.0, 0, 66.0)],
+		"pauses": {0: 4.0, 3: 3.5}, "lines": ["Le conseil se réunit ce soir.", "On dit que des aventuriers viendront bientôt au bourg."]},
+]
+
 var main: Node3D
 
 func build(m: Node3D) -> void:
@@ -94,6 +130,12 @@ func build(m: Node3D) -> void:
 	_stall(Vector3(4.4, 0, 49.9), -10)
 	_square_tree()
 	_station_marks()
+	var Villager := load("res://scripts/villager.gd")
+	for v in VILLAGERS:
+		var n: Node3D = Villager.new()
+		n.name = v.name
+		n.setup(v)
+		main.add_child(n)
 	for o in ON_STALLS:
 		var n: Node3D = load(P % o[0]).instantiate()
 		n.position = Vector3(o[1], main.h(o[1], o[3]) + o[2], o[3])

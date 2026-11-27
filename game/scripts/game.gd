@@ -184,7 +184,7 @@ func slowmo_left() -> float:
 
 ## Ce que le joueur fait vraiment (servira à la progression par le jeu).
 var tip_contre := false
-var stats := {"contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0}
+var stats := {"contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0, "kills": {}, "gardien": false}
 
 func shake(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)

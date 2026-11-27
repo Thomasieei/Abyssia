@@ -75,6 +75,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Tisseuse de mousse (`araignee`, Spider Quaternius « Easy Enemy », CC0, sans UV) : texture de mousse peinte par script en **projection triplanaire**, yeux émissifs. Noms d'animation traduits par `data.anims` (`_an()`), os de réaction par `data.bones`, chute par `data.down`. Pendue à `data.hang` m sur un fil dans les arbres, descend à l'alerte (le fil remonte), remonte au retour. Attaques : morsure (empoisonne, se contre), bond (arc de 0,35 s, se contre ou s'esquive), toile crachée (ralentit 5 s, ne se contre pas). Bois des tisseuses à l'est (20,5 ; 18,5), sentier depuis la route.
 - Toiles au sol : `G.web()` / `G.web_slow()` (joueur ralenti par celles des tisseuses, monstres par la Capuche de tisseuse, sort « Toile collante »). Le tisserand fabrique et équipe ses propres pièces (la forge ne les liste pas).
 - `ABY_TEST=tisseuse` (nid, descente, bond, toile, morsure, contre, sort Toile sur les brutes) et `ABY_TEST=tisseuse_proche` + `ABY_CLOSE=1`.
+- Habitants : `scripts/villager.gd`, liste `VILLAGERS` dans `town.gd` (posés à la main : routine `seq` de gestes UAL ou promenade `route` + `pauses`). Bibliothèque `assets/anims/villager_anims.res` (extraite de UAL1/UAL2 : Mining, Counter_*, Sitting_*, PickUp_Table, Walk_Formal…). Base féminine `Superhero_Female_FullBody` + `Female_Peasant` ; `CB.build({"base": "female"})`, coupe du cou depuis l'os `neck_01` ; les canaux CUSTOM du maillage doivent être retirés (sinon « Invalid array format »). Marteau `Hammer_Small.glb` (Quaternius) dans `hand_r` (0, −90, −90) échelle 0,1.
+- Les habitants parlent de ce que le joueur a vraiment fait (`G.stats` : `kills`, `gardien`, contres) ; une nouvelle pas encore racontée passe toujours en premier. Hors de vue (> 30 m), ils s'arrêtent complètement.
+- `ABY_TEST=bourg` + `ABY_CLOSE=1` : forgeron, marchande, tisserande, vieil homme assis, promeneurs, rumeur après le Gardien.
 - `ABY_TEST=relief` : captures de la crête nord, des falaises est, des collines ouest et de l'étang.
 
 ## Retours du créateur (à appliquer en priorité)
@@ -85,9 +88,9 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 ## Atelier de nuit
 
 Une session programmée (chaque nuit à 2 h 36, heure de Paris) applique cette charte seule : état des lieux, un chantier fini, tests, APK, compte rendu.
-Derniers chantiers faits : nouvelle espèce, la Tisseuse de mousse (bois des tisseuses, soie, Capuche de tisseuse) ; réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
+Derniers chantiers faits : bourg vivant (Bran le forgeron, Maëlle la marchande, Ysolde la tisserande, le vieil Aldric, Jehan et Mahaut qui se promènent ; ils parlent de tes exploits) ; nouvelle espèce, la Tisseuse de mousse (bois des tisseuses, soie, Capuche de tisseuse) ; réactions des monstres (recul, titubement, chute), contres et esquives parfaites ; héros habillé (tenue de rôdeur, épée et bouclier), bourg enrichi (forge, tisserand, marché, place), butin au camp et au repaire ; 1re passe du monde (vent, nuages, papillons, oiseaux, ambiance sonore) ; relief, étang et falaises de la clairière (`scripts/terrain.gd`).
 Boss fait : Gardien de cendre (repaire au nord-ouest du camp des brutes, 3 phases, rejetons, pluie de cendres, souffle en cône, Cœur ardent).
-Prochain : les habitants du bourg (tenues Peasant : forgeron, marchande, passants), puis la progression par le jeu (techniques nées des contres et esquives de `G.stats`, « mise à jour de statut » au bourg).
+Prochain : la progression par le jeu (techniques nées des contres et esquives de `G.stats`, « mise à jour de statut » au bourg auprès d'un habitant), puis le système d'esprit.
 
 ## Plus tard (idées en attente)
 

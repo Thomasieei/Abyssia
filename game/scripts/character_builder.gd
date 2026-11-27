@@ -2,13 +2,13 @@ extends RefCounted
 ## Assemble un personnage Quaternius : tête du personnage de base + tenue modulaire (même squelette).
 ## Le corps de base est réduit à la tête (sinon il traverse les vêtements), comme le conseille Quaternius.
 
-const BASE := "res://assets/hero/Superhero_Male_FullBody.gltf"
-static var _head_mesh: ArrayMesh
+const BASES := {"male": "res://assets/hero/Superhero_Male_FullBody.gltf", "female": "res://assets/hero/Superhero_Female_FullBody.gltf"}
+static var _head_meshes := {}
 static var _mat_cache := {}
 
 ## Corps de base -> tête seule (triangles au-dessus du cou, position de repos), calculé une fois.
-static func _head_only(src: Mesh) -> ArrayMesh:
-	if _head_mesh: return _head_mesh
+static func _head_only(src: Mesh, cut_y: float) -> ArrayMesh:
+	if _head_meshes.has(src): return _head_meshes[src]
 	var arr := src.surface_get_arrays(0)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
@@ -16,21 +16,30 @@ static func _head_only(src: Mesh) -> ArrayMesh:
 	for t in range(0, idx.size(), 3):
 		var y := (v[idx[t]].y + v[idx[t + 1]].y + v[idx[t + 2]].y) / 3.0
 		var x := absf(v[idx[t]].x + v[idx[t + 1]].x + v[idx[t + 2]].x) / 3.0
-		if y > 1.47 and x < 0.2:
+		if y > cut_y and x < 0.2:
 			keep.append(idx[t]); keep.append(idx[t + 1]); keep.append(idx[t + 2])
 	arr[Mesh.ARRAY_INDEX] = keep
+	# canaux personnalisés inutilisés par nos matériaux (leur format exigerait des drapeaux)
+	arr[Mesh.ARRAY_CUSTOM0] = null
+	arr[Mesh.ARRAY_CUSTOM1] = null
+	arr[Mesh.ARRAY_CUSTOM2] = null
+	arr[Mesh.ARRAY_CUSTOM3] = null
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	m.surface_set_material(0, src.surface_get_material(0))
-	_head_mesh = m
+	_head_meshes[src] = m
 	return m
 
 ## opts : outfit (chemin glTF), texture (variante de couleur), hair ("" / chemin), beard (bool), hide (noms de pièces à masquer)
 static func build(opts: Dictionary) -> Node3D:
-	var model: Node3D = load(BASE).instantiate()
+	var model: Node3D = load(BASES[opts.get("base", "male")]).instantiate()
 	var sk: Skeleton3D = model.find_child("Skeleton3D")
-	var body: MeshInstance3D = model.find_child("SuperHero_Male")
-	body.mesh = _head_only(body.mesh)
+	var body: MeshInstance3D = null
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		if mi.name.to_lower().begins_with("superhero"): body = mi
+	# on coupe juste sous la nuque (le col des tenues recouvre la jointure)
+	var cut_y := sk.get_bone_global_rest(sk.find_bone("neck_01")).origin.y - 0.05
+	body.mesh = _head_only(body.mesh, cut_y)
 	# sourcils : la texture a de la transparence (sinon taches blanches)
 	var brows: MeshInstance3D = model.find_child("Eyebrows")
 	if brows:
@@ -66,6 +75,11 @@ static func build(opts: Dictionary) -> Node3D:
 	var hairs := []
 	if opts.get("hair", "") != "": hairs.append(opts.hair)
 	if opts.get("beard", false): hairs.append("res://assets/hero/Hair_Beard.gltf")
+	var skin_tint: Color = opts.get("skin", Color.WHITE)
+	if skin_tint != Color.WHITE:
+		var sm: StandardMaterial3D = body.mesh.surface_get_material(0).duplicate()
+		sm.albedo_color = skin_tint
+		body.set_surface_override_material(0, sm)
 	for hp in hairs:
 		var ba := BoneAttachment3D.new()
 		ba.bone_name = "Head"

@@ -471,6 +471,8 @@ func _stun_update(delta: float) -> void:
 
 func _dead_enter() -> void:
 	dead = true
+	G.stats.kills[kind] = G.stats.kills.get(kind, 0) + 1
+	if kind == "boss": G.stats.gardien = true
 	if kind == "boss":
 		for a in _adds:
 			if is_instance_valid(a) and not a.dead: a.take_hit(9999.0, global_position)
