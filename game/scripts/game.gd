@@ -113,6 +113,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_tele_shader = load("res://scripts/telegraph.gdshader")
 	status = Status.new()
+	status.g = self
 	status.load_saved()
 
 func _notification(what: int) -> void:

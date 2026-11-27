@@ -83,6 +83,7 @@ Une brique est finie à 100 % avant la suivante. Les nouvelles idées vont dans 
 - Techniques (`Status.TECHS`) : nées d'un compteur de `G.stats` (contres parfaits, esquives parfaites, `chutes`, `survies`) et éveillées à la mise à jour. Niveau 2 = Gardien vaincu + une aptitude ≥ E ; les aptitudes repartent de I mais l'acquis reste (`banked`). Sauvegarde `user://statut.json` (jamais en test).
 - Bulles des habitants : **un seul parle à la fois** (`villager._speaker`), le plus proche du joueur reprend la parole. Un Label3D s'efface en fondant `modulate` **et** `outline_modulate` (sinon le contour reste en fantôme), puis `visible = false`.
 - Les animations d'interface se comptent en `G.real_dt` (indépendantes du ralenti) ; en test sous xvfb le jeu tourne lentement : attendre un événement (`["callout", texte]`) plutôt qu'une durée fixe.
+- Un script préchargé par `game.gd` (autoload) ne doit **jamais** écrire `G.` (la vérification `--check-only` du workflow échoue : « Failed to compile depended scripts ») : lui passer le nœud (`status.g = self`).
 - `ABY_TEST=statut` : Aldric appelle, registre avant/pendant/après, techniques éveillées, niveau 2 (sceau), « Dernier instant » en combat, « Pas de l'ombre ». `ABY_TEST=proto` finit au registre avec ce que la partie a vraiment donné.
 
 ## Retours du créateur (à appliquer en priorité)

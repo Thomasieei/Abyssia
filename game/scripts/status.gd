@@ -37,6 +37,7 @@ var val := {}        # aptitudes visibles (0–999)
 var banked := {}     # acquis des niveaux précédents (toujours actifs)
 var pending := {}    # expérience pas encore inscrite
 var techs := {}      # techniques éveillées
+var g: Node          # le nœud global G (donné à la création : pas de dépendance à l'autoload à la compilation)
 
 func _init() -> void:
 	for a in ABIL:
@@ -62,11 +63,11 @@ func ready_techs() -> Array:
 	for id in TECHS:
 		if techs.has(id): continue
 		var t: Dictionary = TECHS[id]
-		if G.stats.get(t.stat, 0) >= t.n: out.append(id)
+		if g.stats.get(t.stat, 0) >= t.n: out.append(id)
 	return out
 
 func can_level() -> bool:
-	if not G.stats.get("gardien", false) or level >= 2: return false
+	if not g.stats.get("gardien", false) or level >= 2: return false
 	for a in ABIL:
 		if int(val[a] + pending[a]) >= LEVEL_NEED: return true
 	return false
@@ -90,7 +91,7 @@ func update() -> Dictionary:
 		for a in ABIL:
 			banked[a] += val[a]
 			val[a] = 0
-	G.status_changed.emit()
+	g.status_changed.emit()
 	return {"from": from, "to": to, "techs": new_t, "level_up": up}
 
 func eff(a: String) -> float:
@@ -128,7 +129,7 @@ func save() -> void:
 	if OS.get_environment("ABY_TEST") != "": return
 	var f := FileAccess.open(PATH, FileAccess.WRITE)
 	if f == null: return
-	f.store_string(JSON.stringify({"level": level, "val": val, "banked": banked, "pending": pending, "techs": techs, "stats": G.stats}))
+	f.store_string(JSON.stringify({"level": level, "val": val, "banked": banked, "pending": pending, "techs": techs, "stats": g.stats}))
 
 func load_saved() -> void:
 	if OS.get_environment("ABY_TEST") != "" or not FileAccess.file_exists(PATH): return
@@ -143,6 +144,6 @@ func load_saved() -> void:
 	var st: Dictionary = d.get("stats", {})
 	for k in st:
 		if k == "kills":
-			for kk in st.kills: G.stats.kills[kk] = int(st.kills[kk])
-		elif typeof(st[k]) == TYPE_BOOL: G.stats[k] = st[k]
-		else: G.stats[k] = int(st[k])
+			for kk in st.kills: g.stats.kills[kk] = int(st.kills[kk])
+		elif typeof(st[k]) == TYPE_BOOL: g.stats[k] = st[k]
+		else: g.stats[k] = int(st[k])
