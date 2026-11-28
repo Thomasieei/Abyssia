@@ -85,6 +85,7 @@ func _ready() -> void:
 	_wind = G.aura(self, "smoke_04", Color(0.75, 1.0, 0.85, 0.35), 0.5)
 	_rune = G.ground_quad(self, "magic_03", Color(1.0, 0.82, 0.4, 0.0), 3.2)
 	G.status_changed.connect(_apply_status)
+	G.gear_changed.connect(_apply_status)
 	_apply_status()
 	hp = max_hp
 	energy = max_energy
@@ -92,7 +93,7 @@ func _ready() -> void:
 ## Le statut inscrit au registre change le corps : vie et énergie max. (la vie garde sa proportion)
 func _apply_status() -> void:
 	var f := hp / max_hp
-	max_hp = G.status.max_hp()
+	max_hp = G.status.max_hp() + G.gear_bonus("hp")
 	hp = clampf(max_hp * f, 1.0, max_hp)
 	max_energy = G.status.max_energy()
 	energy = minf(energy, max_energy)
@@ -129,11 +130,12 @@ func _build_model() -> void:
 	ap.playback_default_blend_time = 0.15
 	_play("Sword_Idle")
 
-## Les 3 premiers sorts viennent de l'arme, les 3 suivants du casque, du plastron et des bottes portés.
+## Les 3 premiers sorts viennent de l'arme ; les 3 suivants sont les sorts APPRIS choisis au registre
+## (protection, puissance, mouvement). L'équipement ne donne que des qualités (G.gear_bonus).
 func _rebuild_skills() -> void:
 	var ids := ["entaille", "charge", "fracas"]
 	for slot in ["casque", "plastron", "bottes"]:
-		ids.append(G.GEAR[G.equipped[slot]].spell)
+		ids.append(G.status.loadout[slot])
 	var old := skills.duplicate()
 	skills = []
 	for i in ids.size():
@@ -188,7 +190,7 @@ func _slide(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	for i in cd_left.size(): cd_left[i] = maxf(cd_left[i] - delta, 0.0)
-	energy = minf(energy + G.status.energy_regen() * delta, max_energy)
+	energy = minf(energy + G.status.energy_regen() * (1.0 + G.gear_bonus("regen")) * delta, max_energy)
 	_tick_buffs(delta)
 	_tick_pending(delta)
 	if dead:
@@ -542,10 +544,10 @@ var _brink := false       # au bord de la mort (pour « Ténacité »)
 var _tenace_cd := 0.0
 
 func dmg_mult() -> float:
-	return (1.4 if _fury_t > 0.0 else 1.0) * (1.5 if _elan_t > 0.0 else 1.0) * G.status.dmg_mult()
+	return (1.4 if _fury_t > 0.0 else 1.0) * (1.5 if _elan_t > 0.0 else 1.0) * G.status.dmg_mult() * (1.0 + G.gear_bonus("dmg"))
 
 func speed_mult() -> float:
-	return (1.6 if _haste_t > 0.0 else 1.0) * (1.25 if _elan_t > 0.0 else 1.0) * G.status.speed_mult() * G.web_slow(global_position, false)
+	return (1.6 if _haste_t > 0.0 else 1.0) * (1.25 if _elan_t > 0.0 else 1.0) * G.status.speed_mult() * (1.0 + G.gear_bonus("speed")) * G.web_slow(global_position, false)
 
 ## Poison de la tisseuse : quelques dégâts à chaque demi-seconde (chiffres verts).
 var _poison_t := 0.0
@@ -710,6 +712,7 @@ func take_hit(dmg: float, from: Vector3, knock := 0.0) -> void:
 		G.burst(global_position + Vector3.UP, "smoke_04", Color(0.9, 0.9, 0.9, 0.5), 6, 2.0, 0.5, 0.3, 0.0)
 		if _dash_t > 0.0: G.status.gain("agilite", 3.0)   # un coup évité en roulant
 		return
+	dmg *= 1.0 - G.gear_bonus("armor")
 	G.status.gain("endurance", dmg / 6.0)
 	_last_hurt = Time.get_ticks_msec() / 1000.0
 	_stop_gather()

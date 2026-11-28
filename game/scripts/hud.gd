@@ -48,6 +48,7 @@ var _panel_btns := []      # [Rect2, action]
 var _upd := {}             # animation de la mise à jour de statut {t, from, to, techs, level_up}
 var _news := false         # des exploits attendent d'être inscrits (vérifié deux fois par seconde)
 var _news_t := 0.0
+var _tab := 0              # registre : 0 statut, 1 sorts
 const Status := preload("res://scripts/status.gd")
 
 func _ready() -> void:
@@ -169,6 +170,7 @@ func nearest_station() -> Dictionary:
 func open_panel(st: Dictionary) -> void:
 	panel = st.id
 	_upd = {}
+	_tab = 0
 	_panel_title = st.title
 	_craft_t = 0.0
 	player.attack_held = false
@@ -187,8 +189,8 @@ func _panel_rows() -> Array:
 			for r in G.RECIPES.tisserand:
 				if G.GEAR.has(r.out):
 					var gd: Dictionary = G.GEAR[r.out]
-					var detail := "%s — sort : %s" % [gd.slot.capitalize(), player.SPELLS[gd.spell].name]
-					var col: Color = SKILL_STYLE[gd.spell].col
+					var detail := "%s — %s" % [gd.slot.capitalize(), G.gear_text(r.out)]
+					var col: Color = gd.color
 					if G.owned_gear.has(r.out):
 						var on: bool = G.equipped[gd.slot] == r.out
 						rows.append([gd.name, detail, col, "Équipé" if on else "Équiper", not on, ["equip", r.out]])
@@ -204,9 +206,8 @@ func _panel_rows() -> Array:
 			for id in G.GEAR:
 				if elsewhere.has(id): continue   # se fabrique (et s'équipe) chez le tisserand
 				var gd: Dictionary = G.GEAR[id]
-				var spell: String = player.SPELLS[gd.spell].name
-				var detail := "%s — sort : %s" % [gd.slot.capitalize(), spell]
-				var col: Color = SKILL_STYLE[gd.spell].col
+				var detail := "%s — %s" % [gd.slot.capitalize(), G.gear_text(id)]
+				var col: Color = gd.color
 				if G.owned_gear.has(id):
 					var on: bool = G.equipped[gd.slot] == id
 					rows.append([gd.name, detail, col, "Équipé" if on else "Équiper", not on, ["equip", id]])
@@ -250,6 +251,14 @@ func do_action(a: Array) -> void:
 		"equip":
 			G.equip(a[1])
 			Sfx.play("pickup", -4.0)
+		"tab":
+			_tab = a[1]
+			Sfx.play("ui", -8.0)
+		"choose":
+			G.status.choose(a[1])
+			G.status.save()
+			Sfx.play("pickup", -4.0)
+			G.ring(player.global_position, SKILL_STYLE[a[1]].tex, Color(SKILL_STYLE[a[1]].col, 0.8), 0.6, 3.5, 0.45)
 		"sell":
 			if G.sell_all(a[1]) > 0: Sfx.play("loot", -4.0)
 		"status_update":
@@ -263,14 +272,14 @@ func do_action(a: Array) -> void:
 			var al = load("res://scripts/villager.gd").by_name.get("Aldric")
 			if al:
 				var lines: Array = al.cfg.on_update
-				al.react("Sitting_Talking", lines[2] if _upd.level_up else (lines[1] if not _upd.techs.is_empty() else lines[0]))
+				al.react("Sitting_Talking", lines[2] if _upd.level_up else (lines[1] if not (_upd.techs.is_empty() and _upd.spells.is_empty()) else lines[0]))
 
 func _process(delta: float) -> void:
 	size = get_viewport_rect().size
 	_news_t -= delta
 	if _news_t <= 0.0:
 		_news_t = 0.5
-		_news = G.status.has_news() and (G.status.pending_total() >= 5 or not G.status.ready_techs().is_empty())
+		_news = G.status.has_news() and (G.status.pending_total() >= 5 or not G.status.ready_techs().is_empty() or not G.status.ready_spells().is_empty())
 	if not _upd.is_empty():
 		_upd.t += G.real_dt   # indépendant du ralenti et du micro-gel
 		if _upd.t >= 1.3 and not _upd.done:
@@ -278,6 +287,9 @@ func _process(delta: float) -> void:
 			Sfx.play("loot", -2.0)
 			G.burst(player.global_position + Vector3.UP * 1.6, "star_06", Color(1, 0.9, 0.55), 22, 3.5, 0.45, 0.8, -1.0)
 			for id in _upd.techs: _toasts.push_front(["Technique : %s" % Status.TECHS[id].name, Color(1, 0.85, 0.45), 4.0])
+			for id in _upd.spells:
+				_toasts.push_front(["Sort appris : %s" % player.SPELLS[id].name, SKILL_STYLE[id].col.lightened(0.3), 5.0])
+				G.ring(player.global_position, SKILL_STYLE[id].tex, Color(SKILL_STYLE[id].col, 0.9), 0.8, 6.0, 0.7)
 			if _upd.level_up:
 				_toasts.push_front(["Niveau %d atteint" % G.status.level, Color(1, 0.8, 0.4), 5.0])
 				G.ring(player.global_position, "magic_03", Color(1.0, 0.85, 0.45, 0.95), 1.0, 9.0, 0.9)
@@ -780,6 +792,16 @@ func _draw_status() -> void:
 	draw_style_box(_sb(Color(0.2, 0.16, 0.11, 0.9), 6), pr)
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 52)), Color(0.22, 0.16, 0.1, 0.95))
 	_txt(r.position + Vector2(22, 35), _panel_title, 22, Color(1, 0.9, 0.7))
+	# onglets : Statut | Sorts (le point doré signale un sort tout juste éveillé)
+	for ti in 2:
+		var tb := Rect2(r.position + Vector2(232 + ti * 112, 10), Vector2(104, 34))
+		var on := _tab == ti
+		draw_style_box(_sb(Color(0.42, 0.3, 0.14, 0.95) if on else Color(0.12, 0.09, 0.06, 0.9), 6), tb)
+		draw_rect(tb, Color(1.0, 0.82, 0.45, 0.85 if on else 0.25), false, 1.5)
+		_txt(tb.position + Vector2(0, 23), ["Statut", "Sorts"][ti], 15, Color(1, 0.95, 0.82) if on else Color(0.72, 0.66, 0.56), tb.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+		if ti == 1 and not on and not _upd.is_empty() and not _upd.get("spells", []).is_empty() and _upd.t >= 1.3:
+			draw_circle(tb.position + Vector2(tb.size.x - 8, 8), 5.0 + sin(_upd.t * 8.0), Color(1, 0.82, 0.35))
+		if not on: _panel_btns.append([tb, ["tab", ti]])
 	var up: bool = not _upd.is_empty()
 	var k: float = _ease((_upd.t - 0.15) / 1.0) if up else 1.0
 	var show_lvl: int = S.level
@@ -789,6 +811,10 @@ func _draw_status() -> void:
 	draw_rect(xb, Color(0.45, 0.15, 0.12))
 	_txt(xb.position + Vector2(0, 27), "X", 20, Color(1, 1, 1), 40, HORIZONTAL_ALIGNMENT_CENTER)
 	_panel_btns.append([xb, ["close"]])
+	if _tab == 1:
+		_draw_spells(pr, up)
+		_draw_status_button(r)
+		return
 	_txt(pr.position + Vector2(18, 24), "Ce que tu as vraiment fait, inscrit dans ton corps.", 13, Color(0.85, 0.78, 0.65))
 	if show_lvl > 1:
 		_txt(pr.position + Vector2(pr.size.x - 330, 24), "Les aptitudes des niveaux passés restent acquises.", 12, Color(1, 0.8, 0.45), 312, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -867,11 +893,15 @@ func _draw_status() -> void:
 		_txt(Vector2(-170, 6), "NIVEAU %d" % S.level, 40, Color(1, 0.86, 0.5, al), 340, HORIZONTAL_ALIGNMENT_CENTER)
 		_txt(Vector2(-170, 32), "Le Gardien de cendre a forgé ton rang.", 13, Color(1, 0.9, 0.75, al), 340, HORIZONTAL_ALIGNMENT_CENTER)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	# bouton
+	_draw_status_button(r)
+
+func _draw_status_button(r: Rect2) -> void:
+	var S = G.status
 	var en: bool = S.has_news() and (_upd.is_empty() or _upd.t >= 2.0)
 	var bb := Rect2(r.end.x - 260, r.end.y - 56, 236, 40)
 	var hint := "Rien de nouveau à inscrire."
 	if S.can_level(): hint = "Un grand exploit : le niveau supérieur t'attend."
+	elif not S.ready_spells().is_empty(): hint = "Un sort s'éveille…"
 	elif not S.ready_techs().is_empty(): hint = "Une technique s'éveille…"
 	elif S.has_news(): hint = "Des exploits attendent d'être inscrits."
 	_txt(Vector2(r.position.x + 28, bb.position.y + 26), hint, 13, Color(0.85, 0.8, 0.7) if en else Color(0.6, 0.58, 0.55))
@@ -879,3 +909,62 @@ func _draw_status() -> void:
 	draw_rect(bb, Color(1.0, 0.82, 0.45, 0.8 if en else 0.2), false, 2.0)
 	_txt(bb.position + Vector2(0, 26), "Mettre à jour le statut", 15, Color(1, 1, 1) if en else Color(0.6, 0.6, 0.62), bb.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	if en: _panel_btns.append([bb, ["status_update"]])
+
+## Page « Sorts » du registre : trois familles (une par emplacement du moyeu). Un sort appris se choisit,
+## un sort encore inconnu montre l'acte qui l'éveillera et où on en est.
+func _draw_spells(pr: Rect2, up: bool) -> void:
+	var S = G.status
+	_txt(pr.position + Vector2(18, 24), "Les sorts naissent de ce que tu fais. Choisis-en un par emplacement.", 13, Color(0.85, 0.78, 0.65))
+	var colw := (pr.size.x - 20) / 3.0
+	var t := Time.get_ticks_msec() / 1000.0
+	for si in 3:
+		var sl: String = Status.SLOTS[si]
+		var x0 := pr.position.x + 10 + si * colw
+		var hc := Vector2(x0 + 16, pr.position.y + 52)
+		_slot_badge(3 + si, hc)
+		_txt(hc + Vector2(18, 5), "%s — %s" % [sl.capitalize(), Status.SLOT_NAMES[sl]], 14, Color(1, 0.85, 0.5), colw - 40)
+		var y := pr.position.y + 70
+		for id in Status.SPELLS:
+			var sp: Dictionary = Status.SPELLS[id]
+			if sp.slot != sl: continue
+			var cell := Rect2(x0, y, colw - 8, 122)
+			var known: bool = S.knows(id)
+			var fresh: bool = up and _upd.get("spells", []).has(id)
+			if fresh and _upd.t < 1.3: known = false
+			var chosen: bool = known and S.loadout[sl] == id
+			var st: Dictionary = SKILL_STYLE[id]
+			draw_style_box(_sb(Color(0.34, 0.24, 0.11, 0.8) if chosen else (Color(0.24, 0.18, 0.1, 0.7) if known else Color(0, 0, 0, 0.28)), 6), cell)
+			if chosen: draw_rect(cell, Color(1.0, 0.82, 0.45, 0.85), false, 2.0)
+			if fresh and _upd.t >= 1.3:
+				var gl := clampf(1.0 - (_upd.t - 1.3) / 3.0, 0.0, 1.0)
+				draw_rect(cell.grow(2), Color(st.col.lightened(0.4), gl), false, 3.0)
+			var oc := cell.position + Vector2(36, 36)
+			if known:
+				_bezel(oc, 24, 0.0, chosen)
+				_orb(oc, 24, st.col, st.tex)
+				_skill_glyph(id, oc, 12, Color(1, 1, 1, 0.95))
+				_txt(cell.position + Vector2(70, 30), player.SPELLS[id].name, 15, Color(1, 0.95, 0.85), cell.size.x - 76)
+				_txt(cell.position + Vector2(70, 50), "Dans le moyeu" if chosen else "Appris", 12,
+					Color(1, 0.82, 0.4) if chosen else Color(0.7, 0.85, 0.6), cell.size.x - 76)
+				draw_multiline_string(font, cell.position + Vector2(12, 74), sp.desc, HORIZONTAL_ALIGNMENT_LEFT, cell.size.x - 22, 11, 2, Color(0.9, 0.86, 0.78))
+				if not chosen:
+					var bb := Rect2(cell.end.x - 96, cell.end.y - 32, 86, 24)
+					draw_rect(bb, Color(0.25, 0.45, 0.2))
+					draw_rect(bb, Color(0.85, 0.72, 0.45, 0.6), false, 1.5)
+					_txt(bb.position + Vector2(0, 17), "Choisir", 13, Color(1, 1, 1), bb.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+					_panel_btns.append([bb, ["choose", id]])
+				elif sp.has("how"):
+					_txt(cell.position + Vector2(12, cell.size.y - 12), sp.how, 10, Color(0.82, 0.72, 0.55), cell.size.x - 20)
+			else:
+				var have: int = mini(S.progress(sp.stat), sp.n)
+				var ok: bool = have >= sp.n
+				draw_circle(oc, 26, Color(0, 0, 0, 0.45))
+				draw_circle(oc, 22, Color(st.col.darkened(0.75), 0.9))
+				draw_arc(oc, 22, -PI * 0.5, -PI * 0.5 + TAU * float(have) / sp.n, 32, Color(st.col, 0.85), 3.0, true)
+				_txt(oc + Vector2(-20, 8), "?", 22, Color(0.75, 0.7, 0.62, 0.8 + 0.2 * sin(t * 3.0)), 40, HORIZONTAL_ALIGNMENT_CENTER)
+				_txt(cell.position + Vector2(70, 30), "? ? ?", 15, Color(0.6, 0.58, 0.55))
+				var cnt := "%d / %d" % [have, sp.n]
+				_txt(cell.position + Vector2(70, 50), cnt, 13, Color(0.6, 1.0, 0.5) if ok else Color(0.65, 0.62, 0.58))
+				if ok: _txt(cell.position + Vector2(78 + font.get_string_size(cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x, 50), "s'éveille !", 12, Color(1, 0.85, 0.45))
+				draw_multiline_string(font, cell.position + Vector2(12, 74), sp.hint, HORIZONTAL_ALIGNMENT_LEFT, cell.size.x - 22, 11, 3, Color(0.7, 0.67, 0.62))
+			y += 128

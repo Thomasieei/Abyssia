@@ -63,6 +63,7 @@ func complete_gather() -> void:
 	charges -= 1
 	var n := randi_range(2, 3)
 	G.give_item("lin", n)
+	G.stats.lin_recolte += n   # la cueillette enseigne « Souffle clair »
 	Sfx.play("pickup", -4.0)
 	G.burst(global_position + Vector3.UP * 0.9, "star_06", Color(1, 0.95, 0.7, 1), 10, 2.5, 0.35, 0.5, -3.0)
 	G.burst(global_position + Vector3.UP * 0.6, "light_01", Color(0.9, 1.0, 0.7, 0.6), 8, 1.5, 0.5, 0.6, 1.0)

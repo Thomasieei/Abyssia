@@ -426,6 +426,11 @@ func _return_enter() -> void:
 			if is_instance_valid(a) and not a.dead: a.take_hit(9999.0, global_position)
 		_adds.clear()
 	_play("Walk", 0.2, 1.3)
+	_ret_best = INF
+	_ret_t = 0.0
+
+var _ret_best := INF   # meilleure distance au camp pendant ce retour
+var _ret_t := 0.0      # temps sans se rapprocher
 
 func _return_update(delta: float) -> void:
 	hp = minf(hp + max_hp * 0.25 * delta, max_hp)
@@ -434,6 +439,22 @@ func _return_update(delta: float) -> void:
 	if to.length() < 0.6:
 		_send(&"home")
 		return
+	# coincé contre un rocher sur le chemin du retour : tout près du camp, il s'y arrête ;
+	# plus loin et hors de vue du joueur, il rejoint son camp (le joueur ne le voit pas)
+	if to.length() < _ret_best - 0.2:
+		_ret_best = to.length()
+		_ret_t = 0.0
+	else:
+		_ret_t += delta
+		if _ret_t > 2.0:
+			var pl: Node3D = G.player
+			if to.length() < 3.0:
+				_send(&"home")
+				return
+			if pl and pl.global_position.distance_to(global_position) > 24.0:
+				global_position = Vector3(home.x, G.world.h(home.x, home.z) + 0.1, home.z)
+				_send(&"home")
+				return
 	_move(to.normalized() * data.speed * 0.9, delta)
 	_turn_to(home, delta, 6.0)
 	var p: Node3D = G.player
@@ -744,6 +765,8 @@ func _spider_strike() -> void:
 			if is_instance_valid(_spit): _spit.queue_free()
 			_spit = null
 			G.web(_leap_to, 2.4, 5.0)
+			# apprentissage par le regard : le héros qui voit cracher la toile apprend le geste
+			if p and not p.dead and p.global_position.distance_to(global_position) < 16.0: G.stats.toiles_vues += 1
 			Sfx.play_at("gather", _leap_to, 0.0, 0.7)
 			if p and not p.dead and Vector2(p.global_position.x - _leap_to.x, p.global_position.z - _leap_to.z).length() < 2.4: hit = true
 			if hit: p.take_hit(data.dmg * 0.4, _leap_to, 0.0)

@@ -32,11 +32,33 @@ const TECHS := {
 		"hint": "Survivre deux fois au bord de la mort."},
 }
 
+## Sorts : on ne les reçoit plus d'un objet, on les apprend en vivant (« tu deviens ce que tu fais »).
+## Trois familles, une par emplacement du moyeu (casque = protection, plastron = puissance, bottes = mouvement).
+## Les gestes de base sont connus dès le départ ; les autres naissent d'un acte réel (clé de G.stats, ou
+## « kills:<espèce> ») et s'éveillent à la mise à jour de statut, comme les techniques.
+const SLOTS := ["casque", "plastron", "bottes"]
+const SLOT_NAMES := {"casque": "Protection", "plastron": "Puissance", "bottes": "Mouvement"}
+const SPELLS := {
+	"garde": {"slot": "casque", "base": true, "desc": "Bouclier de 35 % de ta vie pendant 6 s."},
+	"souffle": {"slot": "casque", "stat": "lin_recolte", "n": 12, "desc": "Rend 22 % de ta vie d'un souffle.",
+		"hint": "Cueillir douze brins de lin sauvage.", "how": "Né de l'odeur du lin."},
+	"toile": {"slot": "casque", "stat": "toiles_vues", "n": 3, "desc": "Crache une toile qui englue les ennemis.",
+		"hint": "Regarder trois fois une tisseuse cracher sa toile.", "how": "Volé du regard aux tisseuses."},
+	"fureur": {"slot": "plastron", "base": true, "desc": "Dégâts +40 % pendant 8 s."},
+	"embrase": {"slot": "plastron", "stat": "kills:brute", "n": 4, "desc": "Une aura de lave brûle tout autour de toi.",
+		"hint": "Abattre quatre brutes de lave.", "how": "La lave des brutes, dans ton sang."},
+	"vent": {"slot": "bottes", "base": true, "desc": "Vitesse +60 % pendant 4 s."},
+	"roulade": {"slot": "bottes", "stat": "kills:rodeur", "n": 3, "desc": "Roulade : invincible le temps du geste.",
+		"hint": "Vaincre trois rôdeurs des falaises.", "how": "Le pas des rôdeurs, devenu tien."},
+}
+
 var level := 1
 var val := {}        # aptitudes visibles (0–999)
 var banked := {}     # acquis des niveaux précédents (toujours actifs)
 var pending := {}    # expérience pas encore inscrite
 var techs := {}      # techniques éveillées
+var spells := {}     # sorts appris
+var loadout := {"casque": "garde", "plastron": "fureur", "bottes": "vent"}   # sort choisi par emplacement
 var g: Node          # le nœud global G (donné à la création : pas de dépendance à l'autoload à la compilation)
 
 func _init() -> void:
@@ -44,6 +66,8 @@ func _init() -> void:
 		val[a] = 0
 		banked[a] = 0
 		pending[a] = 0.0
+	for id in SPELLS:
+		if SPELLS[id].get("base", false): spells[id] = true
 
 static func grade(v: int) -> String:
 	return GRADES[clampi(v / 100, 0, 9)]
@@ -66,6 +90,27 @@ func ready_techs() -> Array:
 		if g.stats.get(t.stat, 0) >= t.n: out.append(id)
 	return out
 
+## Avancement d'un acte : G.stats[clé] ou G.stats.kills[espèce] pour « kills:espèce ».
+func progress(stat: String) -> int:
+	if stat.begins_with("kills:"): return int(g.stats.kills.get(stat.substr(6), 0))
+	return int(g.stats.get(stat, 0))
+
+func ready_spells() -> Array:
+	var out := []
+	for id in SPELLS:
+		if spells.has(id) or SPELLS[id].get("base", false): continue
+		if progress(SPELLS[id].stat) >= SPELLS[id].n: out.append(id)
+	return out
+
+func knows(id: String) -> bool:
+	return spells.has(id)
+
+## Choisir le sort d'un emplacement (au registre).
+func choose(id: String) -> void:
+	if not spells.has(id): return
+	loadout[SPELLS[id].slot] = id
+	g.gear_changed.emit()
+
 func can_level() -> bool:
 	if not g.stats.get("gardien", false) or level >= 2: return false
 	for a in ABIL:
@@ -73,7 +118,7 @@ func can_level() -> bool:
 	return false
 
 func has_news() -> bool:
-	return pending_total() >= 1 or not ready_techs().is_empty() or can_level()
+	return pending_total() >= 1 or not ready_techs().is_empty() or not ready_spells().is_empty() or can_level()
 
 ## Mise à jour de statut : inscrit l'expérience, éveille les techniques, monte de niveau.
 ## Rend {from, to, techs, level_up} pour l'animation du registre.
@@ -84,6 +129,13 @@ func update() -> Dictionary:
 		pending[a] = fmod(pending[a], 1.0)
 	var new_t := ready_techs()
 	for id in new_t: techs[id] = true
+	# un sort tout juste appris prend sa place dans le moyeu si l'emplacement porte encore le geste de base
+	var new_s := ready_spells()
+	for id in new_s:
+		spells[id] = true
+		var sl: String = SPELLS[id].slot
+		if SPELLS[loadout[sl]].get("base", false): loadout[sl] = id
+	if not new_s.is_empty(): g.gear_changed.emit()
 	var to := val.duplicate()
 	var up := can_level()
 	if up:
@@ -92,7 +144,7 @@ func update() -> Dictionary:
 			banked[a] += val[a]
 			val[a] = 0
 	g.status_changed.emit()
-	return {"from": from, "to": to, "techs": new_t, "level_up": up}
+	return {"from": from, "to": to, "techs": new_t, "spells": new_s, "level_up": up}
 
 func eff(a: String) -> float:
 	return float(val[a] + banked[a])
@@ -129,7 +181,8 @@ func save() -> void:
 	if OS.get_environment("ABY_TEST") != "": return
 	var f := FileAccess.open(PATH, FileAccess.WRITE)
 	if f == null: return
-	f.store_string(JSON.stringify({"level": level, "val": val, "banked": banked, "pending": pending, "techs": techs, "stats": g.stats}))
+	f.store_string(JSON.stringify({"level": level, "val": val, "banked": banked, "pending": pending, "techs": techs, "stats": g.stats,
+		"spells": spells, "loadout": loadout, "silver": g.silver, "inventory": g.inventory, "owned_gear": g.owned_gear, "equipped": g.equipped}))
 
 func load_saved() -> void:
 	if OS.get_environment("ABY_TEST") != "" or not FileAccess.file_exists(PATH): return
@@ -141,6 +194,21 @@ func load_saved() -> void:
 		banked[a] = int(d.get("banked", {}).get(a, 0))
 		pending[a] = float(d.get("pending", {}).get(a, 0.0))
 	for id in d.get("techs", {}): techs[id] = true
+	for id in d.get("spells", {}):
+		if SPELLS.has(id): spells[id] = true
+	var lo: Dictionary = d.get("loadout", {})
+	for sl in lo:
+		if SLOTS.has(sl) and spells.has(lo[sl]) and SPELLS[lo[sl]].slot == sl: loadout[sl] = lo[sl]
+	# sac, argent et équipement : l'économie survit à la fermeture du jeu
+	g.silver = int(d.get("silver", g.silver))
+	var inv: Dictionary = d.get("inventory", {})
+	for k in inv:
+		if g.ITEMS.has(k) and int(inv[k]) > 0: g.inventory[k] = int(inv[k])
+	for k in d.get("owned_gear", {}):
+		if g.GEAR.has(k): g.owned_gear[k] = true
+	var eq: Dictionary = d.get("equipped", {})
+	for sl in eq:
+		if g.GEAR.has(eq[sl]) and g.owned_gear.has(eq[sl]) and g.GEAR[eq[sl]].slot == sl: g.equipped[sl] = eq[sl]
 	var st: Dictionary = d.get("stats", {})
 	for k in st:
 		if k == "kills":

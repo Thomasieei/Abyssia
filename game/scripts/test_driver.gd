@@ -31,7 +31,7 @@ func _ready() -> void:
 			["parry", 0.09], ["wait", 0.04], ["shot", "contre_parfait"], ["wait", 0.3], ["shot", "riposte"],
 			["wait", 0.5], ["shot", "chute"], ["wait", 0.9], ["shot", "a_terre"], ["wait", 1.6], ["shot", "releve"],
 			["parry", 0.27], ["wait", 0.03], ["shot", "contre"], ["wait", 0.35], ["shot", "titube"],
-			["equip", "bottes_rodeur"], ["roll", 0.1], ["wait", 0.12], ["shot", "esquive_parfaite"],
+			["learn", "roulade"], ["roll", 0.1], ["wait", 0.12], ["shot", "esquive_parfaite"],
 			["attack", 0.55], ["shot", "recul"], ["attack", 0.3], ["shot", "recul2"],
 			["tp", Vector3(20.5, 0, -3.5)], ["wait", 0.5], ["walk", Vector3(21.5, 0, -7.0)], ["parry", 0.1], ["wait", 0.05], ["shot", "contre_rodeur"], ["state"],
 			["wait", 1.6], ["state"], ["shot", "rodeur_chute"],
@@ -46,12 +46,24 @@ func _ready() -> void:
 			["tp", Vector3(1.0, 0, 70.0)], ["boss_tue"], ["tp", Vector3(5.5, 0, 63.6)], ["wait", 1.0], ["shot", "rumeur_forgeron"], ["report"]]
 		_next()
 		return
+	if OS.get_environment("ABY_TEST") == "sorts":
+		# sorts appris en jouant : cueillir le lin (Souffle clair), regarder les tisseuses (Toile collante),
+		# inscription au registre, choix dans la page « Sorts », puis lancer les sorts appris
+		steps = [["wait", 1.0], ["shot", "moyeu_depart"], ["tp", Vector3(-10.5, 0, 13.6)], ["wait", 0.5], ["harvest", 12], ["shot", "cueillette"],
+			["tp", Vector3(12.5, 0, 23.0)], ["wait", 0.5], ["watch", 3], ["shot", "toiles_vues"],
+			["tp", Vector3(-2.4, 0, 64.9)], ["wait", 1.2], ["panel", 3], ["tab", 1], ["wait", 0.2], ["shot", "sorts_prets"], ["tab", 0],
+			["statup"], ["wait", 2.4], ["shot", "sorts_inscription"], ["tab", 1], ["wait", 0.2], ["shot", "sorts_eveilles"],
+			["choose", "toile"], ["wait", 0.3], ["shot", "toile_choisie"], ["close"], ["wait", 0.5], ["shot", "moyeu_toile"],
+			["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.5], ["walk", Vector3(0.5, 0, -18.0)], ["skill", 3], ["wait", 0.45], ["shot", "toile_lancee"],
+			["choose", "souffle"], ["attack", 1.5], ["skill", 3], ["wait", 0.3], ["shot", "souffle_lance"], ["report"]]
+		_next()
+		return
 	if OS.get_environment("ABY_TEST") == "statut":
 		steps = [["wait", 1.0], ["exploits"], ["tp", Vector3(-2.4, 0, 64.9)], ["wait", 1.4], ["shot", "aldric_appelle"],
 			["panel", 3], ["wait", 0.2], ["shot", "registre_avant"], ["statup"], ["wait", 0.6], ["shot", "registre_inscription"], ["wait", 2.0], ["shot", "registre_techniques"],
 			["close"], ["grand_exploit"], ["panel", 3], ["wait", 0.2], ["shot", "niveau_pret"], ["statup"], ["wait", 0.9], ["shot", "niveau_compte"], ["wait", 1.6], ["shot", "niveau_2"], ["close"], ["wait", 0.3], ["shot", "niveau_2_bourg"],
 			["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.8], ["walk", Vector3(0.5, 0, -19.5)], ["parry", 0.09], ["callout", "Dernier instant !"], ["wait", 0.08], ["shot", "dernier_instant"],
-			["wait", 1.5], ["equip", "bottes_rodeur"], ["roll", 0.1], ["wait", 0.7], ["shot", "pas_ombre"], ["report"]]
+			["wait", 1.5], ["learn", "roulade"], ["roll", 0.1], ["wait", 0.7], ["shot", "pas_ombre"], ["report"]]
 		_next()
 		return
 	if OS.get_environment("ABY_TEST") == "tisseuse_proche":
@@ -63,7 +75,7 @@ func _ready() -> void:
 			["wait", 1.2], ["shot", "au_sol"], ["walk", Vector3(11.0, 0, 24.5)], ["pat", "bond"], ["shot", "bond"], ["walk", Vector3(11.0, 0, 24.5)], ["pat", "toile"], ["shot", "toile_crachat"], ["wait", 0.5], ["shot", "toile_sol"],
 			["pat", "morsure"], ["shot", "morsure"], ["parry", 0.12], ["wait", 0.05], ["shot", "contre_tisseuse"], ["wait", 0.9], ["shot", "tisseuse_renversee"],
 			["fight", 25.0], ["shot", "apres_combat"],
-			["ownequip", "capuche_soie"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.5], ["walk", Vector3(0.5, 0, -18.5)], ["skill", 3], ["wait", 0.45], ["shot", "sort_toile"],
+			["ownequip", "capuche_soie"], ["learn", "toile"], ["tp", Vector3(0.5, 0, -15.5)], ["wait", 0.5], ["walk", Vector3(0.5, 0, -18.5)], ["skill", 3], ["wait", 0.45], ["shot", "sort_toile"],
 			["wait", 1.0], ["shot", "brutes_engluees"], ["report"]]
 		_next()
 		return
@@ -81,7 +93,7 @@ func _ready() -> void:
 		["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["act", 0], ["craftwait"], ["shot", "tissu_fait"], ["close"],
 		["walk", Vector3(4.6, 0, 61.5)], ["walk", Vector3(5.6, 0, 60)], ["panel", 1], ["shot", "panneau_forge"],
 		["actid", "plastron_cendre"], ["craftwait"], ["actid", "bottes_rodeur"], ["craftwait"], ["shot", "forge_faite"], ["close"],
-		["wait", 0.3], ["shot", "nouveaux_sorts"],
+		["wait", 0.3], ["shot", "apres_forge"],
 		["walk", Vector3(0, 0, 52.5)], ["panel", 2], ["shot", "panneau_marche"], ["act", 0], ["wait", 0.3], ["close"],
 		["walk", Vector3(0.3, 0, 45)], ["shot", "sortie_bourg"], ["walk", Vector3(0.5, 0, 34)],
 		["walk", Vector3(-3, 0, 18)], ["shot", "chemin"],
@@ -93,7 +105,7 @@ func _ready() -> void:
 		["skill", 0], ["wait", 0.32], ["shot", "entaille"],
 		["attack", 1.0], ["wait_tele"], ["shot", "zone_ennemie"],
 		["skill", 2], ["wait", 0.53], ["shot", "fracas"], ["wait", 1.4],
-		["skill", 3], ["skill", 4], ["wait", 0.3], ["shot", "garde_embrasement"],
+		["skill", 3], ["skill", 4], ["wait", 0.3], ["shot", "garde_fureur"],
 		["attack", 2.0], ["skill", 1], ["wait", 0.35], ["shot", "charge"],
 		["fight", 14.0], ["shot", "apres_combat"],
 		["walk", Vector3(4, 0, -4)], ["walk", Vector3(15, 0, -7)], ["wait", 0.8], ["shot", "rodeurs_falaises"],
@@ -106,7 +118,8 @@ func _ready() -> void:
 		["wait", 1.0], ["shot", "fin"],
 		# retour au bourg : Aldric inscrit ce que la partie a vraiment donné
 		["tp", Vector3(-2.4, 0, 64.9)], ["wait", 1.2], ["shot", "retour_aldric"], ["panel", 3], ["wait", 0.2], ["shot", "registre_partie"],
-		["statup"], ["wait", 2.2], ["shot", "registre_partie_inscrit"], ["close"], ["report"],
+		["statup"], ["wait", 2.2], ["shot", "registre_partie_inscrit"],
+		["tab", 1], ["wait", 0.3], ["shot", "registre_sorts"], ["close"], ["wait", 0.4], ["shot", "moyeu_sorts_appris"], ["report"],
 	]
 	_next()
 
@@ -122,6 +135,7 @@ func _next() -> void:
 	_mode = s[0]
 	match _mode:
 		"walk": _goal = s[1]
+		"harvest", "watch": pass
 		"gather":
 			var n = _p().nearest_gather()
 			print("TEST gather node=", n != null)
@@ -176,6 +190,17 @@ func _next() -> void:
 			G.hud.get_child(0).do_action(["status_update"])
 			print("TEST statut niveau=", G.status.level, " val=", G.status.val, " techs=", G.status.techs.keys(), " pv_max=", _p().max_hp)
 			_next()
+		"choose":
+			G.hud.get_child(0).do_action(["choose", s[1]])
+			print("TEST choix ", s[1], " moyeu=", G.status.loadout)
+			_next()
+		"learn":
+			G.status.spells[s[1]] = true
+			G.status.choose(s[1])
+			_next()
+		"tab":
+			G.hud.get_child(0).do_action(["tab", s[1]])
+			_next()
 		"ownequip":
 			G.owned_gear[s[1]] = true
 			G.equip(s[1])
@@ -209,7 +234,7 @@ func _next() -> void:
 			_next()
 		"report":
 			print("TEST sentinelle ", G.sentinel.summary())
-			print("TEST equipement ", G.equipped)
+			print("TEST equipement ", G.equipped, " sorts=", G.status.spells.keys(), " moyeu=", G.status.loadout)
 			print("TEST stats ", G.stats)
 			print("TEST statut niveau=", G.status.level, " val=", G.status.val, " attente=", G.status.pending, " techs=", G.status.techs.keys())
 			print("TEST report silver=", G.silver, " inv=", G.inventory, " hp=", _p().hp, " fps_moy=", _fps_acc / maxf(_fps_n, 1))
@@ -286,6 +311,42 @@ func _process(delta: float) -> void:
 			if G.hud.get_child(0)._callout[0] == s[1] or _t > 6.0:
 				if _t > 6.0: print("TEST callout timeout ", s[1])
 				_next()
+		"harvest":
+			# cueille vraiment, buisson après buisson, jusqu'à s[1] brins
+			if G.stats.lin_recolte >= s[1] or _t > 120.0:
+				p.move_input = Vector2.ZERO
+				print("TEST cueillette lin=", G.stats.lin_recolte, " t=", snappedf(_t, 0.1))
+				_next()
+				return
+			if p.gather_progress() >= 0.0: return
+			var n = p.nearest_gather()
+			if n:
+				p.move_input = Vector2.ZERO
+				p.start_gather(n)
+				return
+			var best: Node3D = null
+			for g in G.gather_nodes:
+				if g.ready_to_gather() and (best == null or g.global_position.distance_to(p.global_position) < best.global_position.distance_to(p.global_position)): best = g
+			if best:
+				var to: Vector3 = best.global_position - p.global_position
+				to.y = 0
+				p.move_input = Vector2(to.normalized().x, to.normalized().z)
+		"watch":
+			# regarde les tisseuses à bonne distance (5–8 m) jusqu'à avoir vu s[1] toiles
+			if G.stats.toiles_vues >= s[1] or _t > 60.0 or p.dead:
+				p.move_input = Vector2.ZERO
+				print("TEST toiles vues=", G.stats.toiles_vues, " t=", snappedf(_t, 0.1), " hp=", int(p.hp))
+				_next()
+				return
+			var near: Node3D = null
+			for e in G.enemies:
+				if e.kind == "araignee" and not e.dead and (near == null or e.global_position.distance_to(p.global_position) < near.global_position.distance_to(p.global_position)): near = e
+			if near:
+				var away: Vector3 = p.global_position - near.global_position
+				away.y = 0
+				if away.length() < 5.0: p.move_input = Vector2(away.normalized().x, away.normalized().z)
+				elif away.length() > 8.0: p.move_input = -Vector2(away.normalized().x, away.normalized().z)
+				else: p.move_input = Vector2.ZERO
 		"craftwait":
 			if G.hud.get_child(0)._craft_t <= 0.0 and _t > 0.2: _next()
 		"wait_tele":

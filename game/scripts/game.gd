@@ -36,17 +36,35 @@ const ITEMS := {
 	"soie": {"name": "Soie de tisseuse", "color": Color(0.85, 0.95, 0.75), "price": 12},
 }
 
-## Équipement : chaque pièce donne le sort de son emplacement (« tu es ce que tu portes »).
-## skill = index du sort dans player.SPELLS
+## Équipement : un outil et une économie. Il ne donne plus de sort (les sorts s'apprennent en jouant,
+## voir status.gd) mais des qualités : vie, armure (dégâts reçus en moins), dégâts, vitesse, regain d'énergie.
 const GEAR := {
-	"casque_garde": {"name": "Heaume du gardien", "slot": "casque", "spell": "garde"},
-	"capuche_lin": {"name": "Capuche de lin", "slot": "casque", "spell": "souffle"},
-	"plastron_fureur": {"name": "Plastron du soldat", "slot": "plastron", "spell": "fureur"},
-	"plastron_cendre": {"name": "Plastron de cendre", "slot": "plastron", "spell": "embrase"},
-	"bottes_vent": {"name": "Bottes de voyage", "slot": "bottes", "spell": "vent"},
-	"bottes_rodeur": {"name": "Bottes du rôdeur", "slot": "bottes", "spell": "roulade"},
-	"capuche_soie": {"name": "Capuche de tisseuse", "slot": "casque", "spell": "toile"},
+	"casque_garde": {"name": "Heaume du gardien", "slot": "casque", "color": Color(0.55, 0.7, 1.0), "bonus": {"hp": 40.0, "armor": 0.05}},
+	"capuche_lin": {"name": "Capuche de lin", "slot": "casque", "color": Color(0.95, 0.9, 0.7), "bonus": {"regen": 0.3}},
+	"capuche_soie": {"name": "Capuche de tisseuse", "slot": "casque", "color": Color(0.8, 0.95, 0.7), "bonus": {"hp": 30.0, "regen": 0.15, "speed": 0.03}},
+	"plastron_fureur": {"name": "Plastron du soldat", "slot": "plastron", "color": Color(0.9, 0.45, 0.4), "bonus": {"armor": 0.08}},
+	"plastron_cendre": {"name": "Plastron de cendre", "slot": "plastron", "color": Color(1.0, 0.55, 0.25), "bonus": {"dmg": 0.12, "armor": 0.04}},
+	"bottes_vent": {"name": "Bottes de voyage", "slot": "bottes", "color": Color(0.6, 0.95, 0.85), "bonus": {"speed": 0.04}},
+	"bottes_rodeur": {"name": "Bottes du rôdeur", "slot": "bottes", "color": Color(0.9, 0.78, 0.55), "bonus": {"speed": 0.08, "regen": 0.1}},
 }
+
+## Somme d'une qualité sur l'équipement porté.
+func gear_bonus(key: String) -> float:
+	var v := 0.0
+	for sl in equipped: v += GEAR[equipped[sl]].bonus.get(key, 0.0)
+	return v
+
+## « Vie +40, armure 5 % » : ce que la pièce apporte, en clair.
+func gear_text(id: String) -> String:
+	var b: Dictionary = GEAR[id].bonus
+	var parts := []
+	if b.has("hp"): parts.append("vie +%d" % int(b.hp))
+	if b.has("armor"): parts.append("dégâts reçus −%d %%" % int(round(b.armor * 100)))
+	if b.has("dmg"): parts.append("dégâts +%d %%" % int(round(b.dmg * 100)))
+	if b.has("speed"): parts.append("vitesse +%d %%" % int(round(b.speed * 100)))
+	if b.has("regen"): parts.append("énergie +%d %%" % int(round(b.regen * 100)))
+	var t := ", ".join(parts)
+	return t.substr(0, 1).to_upper() + t.substr(1)
 
 ## Recettes par poste de travail : produit, quantité, coût {objet: n}, argent, durée
 const RECIPES := {
@@ -200,7 +218,7 @@ func slowmo_left() -> float:
 
 ## Ce que le joueur fait vraiment (servira à la progression par le jeu).
 var tip_contre := false
-var stats := {"contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0, "survies": 0, "kills": {}, "gardien": false}
+var stats := {"lin_recolte": 0, "toiles_vues": 0, "contres": 0, "contres_parfaits": 0, "esquives_parfaites": 0, "chutes": 0, "survies": 0, "kills": {}, "gardien": false}
 
 func shake(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
@@ -294,8 +312,7 @@ func number(pos: Vector3, value: int, color: Color, big := false) -> void:
 	l.font_size = 44
 	l.outline_size = 12
 	l.modulate = color
-	if color.a <= 0.0: l.outline_modulate = Color(0, 0, 0, 0)
-	l.outline_modulate = Color(0, 0, 0, 0.85)
+	l.outline_modulate = Color(0, 0, 0, 0.0 if color.a <= 0.0 else 0.85)
 	l.font = load("res://assets/fonts/DejaVuSansCondensed-Bold.ttf")
 	world.add_child(l)
 	l.global_position = pos + Vector3(randf_range(-0.35, 0.35), 0.0, 0.0)
@@ -304,6 +321,7 @@ func number(pos: Vector3, value: int, color: Color, big := false) -> void:
 	tw.tween_property(l, "global_position:y", pos.y + 1.1, 0.7).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUART)
 	tw.tween_property(l, "scale", Vector3.ONE * (1.35 if big else 1.15), 0.08)
 	tw.chain().tween_property(l, "modulate:a", 0.0, 0.25)
+	tw.parallel().tween_property(l, "outline_modulate:a", 0.0, 0.25)
 	tw.chain().tween_callback(l.queue_free)
 
 ## Zone au sol annonçant une attaque. shape: 0 cercle, 1 cône, 2 rectangle.
